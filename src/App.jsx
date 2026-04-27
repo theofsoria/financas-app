@@ -133,14 +133,59 @@ function getFamilyReimbursementPerson(text) {
 function parseQuickEntry(text) {
   const lower = normalizeText(text);
   const value = getFirstMoneyFromText(text);
-  const isCouple = lower.includes("aline") || lower.includes("theo") || lower.includes("casal") || lower.includes("split") || lower.includes("dividir") || lower.includes("namorada") || lower.includes("namorado");
-  const type = lower.includes("recebi") || lower.includes("ganhei") || lower.includes("entrada") || lower.includes("receita") || lower.includes("salario") ? "Receita" : "Despesa";
-  const category = inferCategory(text);
-  const account = lower.includes("pix") ? "Pix" : lower.includes("dinheiro") ? "Dinheiro" : lower.includes("debito") ? "Débito" : "Cartão";
+
+  const isCouple =
+    lower.includes("aline") ||
+    lower.includes("theo") ||
+    lower.includes("casal") ||
+    lower.includes("split") ||
+    lower.includes("dividir") ||
+    lower.includes("namorada") ||
+    lower.includes("namorado");
+
+  const isIncome =
+    lower.includes("recebi") ||
+    lower.includes("recebimento") ||
+    lower.includes("ganhei") ||
+    lower.includes("entrada") ||
+    lower.includes("receita") ||
+    lower.includes("salario") ||
+    lower.includes("pagamento");
+
+  const type = isIncome ? "Receita" : "Despesa";
+
+  const familyReimbursement = getFamilyReimbursementPerson(text);
+
+  let category = inferCategory(text);
+
+  if (isIncome && !familyReimbursement) {
+    category = "Trabalho";
+  }
+
+  if (familyReimbursement) {
+    category = "Reembolso";
+  }
+
+  let account = "Cartão";
+
+  if (lower.includes("pix")) account = "Pix";
+  else if (lower.includes("dinheiro")) account = "Dinheiro";
+  else if (lower.includes("debito")) account = "Débito";
+  else if (isIncome) account = "Conta";
+
   const paidBy = getPaidBy(text);
   const split = parseSplitFromText(text, value, paidBy);
-  const familyReimbursement = getFamilyReimbursementPerson(text);
-  return { value, type, category, account, isCouple, paidBy, familyReimbursement, ...split };
+
+  return {
+    value,
+    type,
+    category,
+    account,
+    isCouple,
+    paidBy,
+    familyReimbursement,
+    ...split,
+  };
 }
 
 function calculateCoupleBalance(expenses) {
