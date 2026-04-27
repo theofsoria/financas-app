@@ -501,17 +501,34 @@ export default function ControleFinanceiroApp() {
         </Card>
 
         <Card>
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <SectionTitle title="Competência" subtitle="Escolha o mês de trabalho e feche quando terminar." />
-              <p className="mt-2 text-sm font-bold text-slate-700">Status: {currentMonthIsClosed ? "Fechado" : "Aberto"}</p>
-            </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-              <Input type="month" value={activeMonth} onChange={(e) => syncFormMonth(e.target.value)} className="w-full sm:w-48" />
-              {currentMonthIsClosed ? <Button type="button" variant="secondary" onClick={reopenMonth}>Reabrir mês</Button> : <Button type="button" onClick={closeMonth}>Fechar mês</Button>}
-            </div>
-          </div>
-        </Card>
+  <div className="space-y-4">
+    <div>
+      <SectionTitle title="Competência" subtitle="Escolha o mês de trabalho e feche quando terminar." />
+      <p className="mt-2 text-sm font-bold text-slate-700">
+        Status: {currentMonthIsClosed ? "Fechado" : "Aberto"}
+      </p>
+    </div>
+
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+      <Input
+        type="month"
+        value={activeMonth}
+        onChange={(e) => syncFormMonth(e.target.value)}
+        className="w-full min-w-0"
+      />
+
+      {currentMonthIsClosed ? (
+        <Button type="button" variant="secondary" onClick={reopenMonth} className="w-full sm:w-auto">
+          Reabrir mês
+        </Button>
+      ) : (
+        <Button type="button" onClick={closeMonth} className="w-full sm:w-auto">
+          Fechar mês
+        </Button>
+      )}
+    </div>
+  </div>
+</Card>
 
         <div className="sticky top-3 z-10 rounded-[24px] bg-white/70 p-2 shadow-sm ring-1 ring-black/5 backdrop-blur">
           <div className="grid grid-cols-3 gap-2">
