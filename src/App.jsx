@@ -506,8 +506,8 @@ export default function ControleFinanceiroApp() {
               <SectionTitle title="Competência" subtitle="Escolha o mês de trabalho e feche quando terminar." />
               <p className="mt-2 text-sm font-bold text-slate-700">Status: {currentMonthIsClosed ? "Fechado" : "Aberto"}</p>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input type="month" value={activeMonth} onChange={(e) => syncFormMonth(e.target.value)} className="sm:w-48" />
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              <Input type="month" value={activeMonth} onChange={(e) => syncFormMonth(e.target.value)} className="w-full sm:w-48" />
               {currentMonthIsClosed ? <Button type="button" variant="secondary" onClick={reopenMonth}>Reabrir mês</Button> : <Button type="button" onClick={closeMonth}>Fechar mês</Button>}
             </div>
           </div>
