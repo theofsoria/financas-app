@@ -3,6 +3,63 @@ import { supabase } from "./supabase";
 
 const PEOPLE = ["Theo", "Aline"];
 const COLORS = ["#7c3aed", "#06b6d4", "#10b981", "#f59e0b", "#ef4444", "#64748b", "#ec4899"];
+const APP_TIME_ZONE = "America/Sao_Paulo";
+
+function getSaoPauloParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    year: map.year,
+    month: map.month,
+    day: map.day,
+    hour: map.hour,
+    minute: map.minute,
+    second: map.second
+  };
+}
+
+function getTodaySaoPauloISO() {
+  const p = getSaoPauloParts();
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
+function getCurrentMonthSaoPaulo() {
+  const p = getSaoPauloParts();
+  return `${p.year}-${p.month}`;
+}
+
+function getNowSaoPauloTimestamp() {
+  const p = getSaoPauloParts();
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
+}
+
+function getDateInsideMonthSaoPaulo(monthKeyValue) {
+  if (!monthKeyValue || monthKeyValue.length < 7) return getTodaySaoPauloISO();
+
+  const today = getSaoPauloParts();
+  const year = Number(monthKeyValue.slice(0, 4));
+  const month = Number(monthKeyValue.slice(5, 7));
+  const day = Math.min(Number(today.day), new Date(year, month, 0).getDate());
+
+  return `${monthKeyValue}-${String(day).padStart(2, "0")}`;
+}
+
+function formatDateBR(dateStr) {
+  if (!dateStr) return "";
+  const [year, month, day] = String(dateStr).slice(0, 10).split("-");
+  if (!year || !month || !day) return String(dateStr);
+  return `${day}/${month}/${year}`;
+}
 
 const categoryRules = [
   { category: "Alimentação", words: ["ifood", "mercado", "zaffari", "padaria", "restaurante", "cafe", "lanche", "supermercado", "jantar", "almoco", "delivery", "comida", "pizza", "sushi", "rappi"] },
@@ -396,15 +453,15 @@ export default function ControleFinanceiroApp() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [activeTab, setActiveTab] = useState("Casal");
-  const [activeMonth, setActiveMonth] = useState("2026-04");
+  const [activeMonth, setActiveMonth] = useState(getCurrentMonthSaoPaulo());
   const [closedMonths, setClosedMonths] = useState({});
   const [transactions, setTransactions] = useState([]);
   const [coupleExpenses, setCoupleExpenses] = useState([]);
   const [quickText, setQuickText] = useState("");
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
-  const [form, setForm] = useState({ date: "2026-04-27", type: "Despesa", description: "", category: "Outros", account: "Cartão", value: "" });
-  const [coupleForm, setCoupleForm] = useState({ date: "2026-04-27", description: "", category: "Alimentação", paidBy: "Theo", total: "", splitType: "Igual", theoShare: "", alineShare: "" });
+  const [form, setForm] = useState({ date: getTodaySaoPauloISO(), type: "Despesa", description: "", category: "Outros", account: "Cartão", value: "" });
+  const [coupleForm, setCoupleForm] = useState({ date: getTodaySaoPauloISO(), description: "", category: "Alimentação", paidBy: "Theo", total: "", splitType: "Igual", theoShare: "", alineShare: "" });
 
   const currentUserId = user ? getUserKeyFromEmail(user.email) : "theo";
   const currentUserName = user ? getUserNameFromEmail(user.email) : "Theo";
@@ -573,7 +630,8 @@ export default function ControleFinanceiroApp() {
         category: data.category,
         account: data.account,
         value,
-        reimbursement_person: data.reimbursementPerson || null
+        reimbursement_person: data.reimbursementPerson || null,
+        created_at: getNowSaoPauloTimestamp()
       })
       .select()
       .single();
@@ -659,7 +717,7 @@ export default function ControleFinanceiroApp() {
 
   async function handleQuickAdd() {
     const parsed = parseQuickEntry(quickText, currentUserName);
-    const date = activeMonth + "-27";
+    const date = getDateInsideMonthSaoPaulo(activeMonth);
     if (parsed.isCouple) {
       const saved = await addCoupleExpense({ date, description: quickText, category: parsed.category === "Casal" ? "Alimentação" : parsed.category, paidBy: parsed.paidBy, total: parsed.value, splitType: parsed.splitType, theoShare: parsed.theoShare, alineShare: parsed.alineShare });
       if (saved) {
@@ -694,7 +752,7 @@ export default function ControleFinanceiroApp() {
     const payer = coupleBalance > 0 ? "Aline" : "Theo";
     const receiver = coupleBalance > 0 ? "Theo" : "Aline";
     const amount = Math.abs(coupleBalance);
-    await addCoupleExpense({ date: activeMonth + "-28", description: "Acerto: " + payer + " pagou " + receiver, category: "Reembolso", paidBy: payer, total: amount, splitType: "Acerto", theoShare: payer === "Aline" ? amount : 0, alineShare: payer === "Theo" ? amount : 0 });
+    await addCoupleExpense({ date: getDateInsideMonthSaoPaulo(activeMonth), description: "Acerto: " + payer + " pagou " + receiver, category: "Reembolso", paidBy: payer, total: amount, splitType: "Acerto", theoShare: payer === "Aline" ? amount : 0, alineShare: payer === "Theo" ? amount : 0 });
   }
 
   async function removePersonalTransaction(item) {
@@ -720,9 +778,10 @@ export default function ControleFinanceiroApp() {
   }
 
   function syncFormMonth(nextMonth) {
+    const localDate = getDateInsideMonthSaoPaulo(nextMonth);
     setActiveMonth(nextMonth);
-    setForm((prev) => ({ ...prev, date: nextMonth + "-27" }));
-    setCoupleForm((prev) => ({ ...prev, date: nextMonth + "-27" }));
+    setForm((prev) => ({ ...prev, date: localDate }));
+    setCoupleForm((prev) => ({ ...prev, date: localDate }));
   }
 
   if (authLoading) {
@@ -836,7 +895,7 @@ export default function ControleFinanceiroApp() {
 
             <Card>
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><SectionTitle title="Histórico do casal" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar" className="md:max-w-xs" /></div>
-              <div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-slate-400"><th className="py-3">Data</th><th>Descrição</th><th>Categoria</th><th>Pagou</th><th>Divisão</th><th>Theo</th><th>Aline</th><th className="text-right">Total</th><th></th></tr></thead><tbody>{filteredCoupleExpenses.map((t) => <tr key={t.id} className="border-b last:border-0"><td className="py-4 whitespace-nowrap">{String(t.date).split("-").reverse().join("/")}</td><td className="font-bold">{t.description}</td><td>{t.category}</td><td>{t.paidBy}</td><td>{t.splitType}</td><td>{brl(t.theoShare)}</td><td>{brl(t.alineShare)}</td><td className="text-right font-black whitespace-nowrap">{brl(t.total)}</td><td className="text-right"><button onClick={() => removeCoupleExpense(t)} className="rounded-xl p-2 hover:bg-slate-100" type="button">🗑️</button></td></tr>)}</tbody></table></div>
+              <div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-slate-400"><th className="py-3">Data</th><th>Descrição</th><th>Categoria</th><th>Pagou</th><th>Divisão</th><th>Theo</th><th>Aline</th><th className="text-right">Total</th><th></th></tr></thead><tbody>{filteredCoupleExpenses.map((t) => <tr key={t.id} className="border-b last:border-0"><td className="py-4 whitespace-nowrap">{formatDateBR(t.date)}</td><td className="font-bold">{t.description}</td><td>{t.category}</td><td>{t.paidBy}</td><td>{t.splitType}</td><td>{brl(t.theoShare)}</td><td>{brl(t.alineShare)}</td><td className="text-right font-black whitespace-nowrap">{brl(t.total)}</td><td className="text-right"><button onClick={() => removeCoupleExpense(t)} className="rounded-xl p-2 hover:bg-slate-100" type="button">🗑️</button></td></tr>)}</tbody></table></div>
             </Card>
           </>
         ) : null}
@@ -892,7 +951,7 @@ export default function ControleFinanceiroApp() {
               <Card className="lg:col-span-3"><SectionTitle title={"Gastos pessoais em " + monthLabel(activeMonth)} subtitle="Pizza de distribuição das despesas." /><div className="mt-5"><PieChart data={byCategory} /></div></Card>
             </div>
 
-            <Card><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><SectionTitle title={"Lançamentos pessoais de " + currentUserName} /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar" className="md:max-w-xs" /></div><div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-slate-400"><th className="py-3">Data</th><th>Tipo</th><th>Descrição</th><th>Categoria</th><th>Conta</th><th className="text-right">Valor</th><th></th></tr></thead><tbody>{filteredTransactions.map((t) => <tr key={t.id} className="border-b last:border-0"><td className="py-4 whitespace-nowrap">{String(t.date).split("-").reverse().join("/")}</td><td>{t.type}</td><td className="font-bold">{t.description}</td><td>{t.category}</td><td>{t.account}</td><td className="text-right font-black whitespace-nowrap">{brl(t.value)}</td><td className="text-right"><button onClick={() => removePersonalTransaction(t)} className="rounded-xl p-2 hover:bg-slate-100" type="button">🗑️</button></td></tr>)}</tbody></table></div></Card>
+            <Card><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><SectionTitle title={"Lançamentos pessoais de " + currentUserName} /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar" className="md:max-w-xs" /></div><div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-slate-400"><th className="py-3">Data</th><th>Tipo</th><th>Descrição</th><th>Categoria</th><th>Conta</th><th className="text-right">Valor</th><th></th></tr></thead><tbody>{filteredTransactions.map((t) => <tr key={t.id} className="border-b last:border-0"><td className="py-4 whitespace-nowrap">{formatDateBR(t.date)}</td><td>{t.type}</td><td className="font-bold">{t.description}</td><td>{t.category}</td><td>{t.account}</td><td className="text-right font-black whitespace-nowrap">{brl(t.value)}</td><td className="text-right"><button onClick={() => removePersonalTransaction(t)} className="rounded-xl p-2 hover:bg-slate-100" type="button">🗑️</button></td></tr>)}</tbody></table></div></Card>
           </>
         ) : null}
 
