@@ -116,10 +116,7 @@ function getPaidBy(text, fallback = "Theo") {
 function getUserNameFromEmail(email) {
   const lower = normalizeText(email || "");
 
-  if (
-    lower.includes("aline") ||
-    lower.includes("ilhas.aline@gmail.com")
-  ) {
+  if (lower.includes("aline") || lower.includes("ilhas.aline@gmail.com") || lower.includes("ilhas.aline") || lower.includes("natalia")) {
     return "Aline";
   }
 
@@ -147,9 +144,107 @@ function parseSplitFromText(text, total, paidBy) {
   return { splitType: "Igual", theoShare: total / 2, alineShare: total / 2 };
 }
 
+function parseDebtStatement(text, value) {
+  const lower = normalizeText(text);
+
+  const theoOwesAline =
+    lower.includes("theo deve") &&
+    (
+      lower.includes("para aline") ||
+      lower.includes("pra aline") ||
+      lower.includes("a aline")
+    );
+
+  const alineOwesTheo =
+    lower.includes("aline deve") &&
+    (
+      lower.includes("para theo") ||
+      lower.includes("pra theo") ||
+      lower.includes("ao theo")
+    );
+
+  const theoPaidAline =
+    lower.includes("theo pagou") &&
+    (
+      lower.includes("para aline") ||
+      lower.includes("pra aline") ||
+      lower.includes("a aline")
+    );
+
+  const alinePaidTheo =
+    lower.includes("aline pagou") &&
+    (
+      lower.includes("para theo") ||
+      lower.includes("pra theo") ||
+      lower.includes("ao theo")
+    );
+
+  if (theoOwesAline) {
+    return {
+      isDebtStatement: true,
+      isCouple: true,
+      category: "Reembolso",
+      paidBy: "Aline",
+      splitType: "Acerto",
+      theoShare: value,
+      alineShare: 0
+    };
+  }
+
+  if (alineOwesTheo) {
+    return {
+      isDebtStatement: true,
+      isCouple: true,
+      category: "Reembolso",
+      paidBy: "Theo",
+      splitType: "Acerto",
+      theoShare: 0,
+      alineShare: value
+    };
+  }
+
+  if (theoPaidAline) {
+    return {
+      isDebtStatement: true,
+      isCouple: true,
+      category: "Reembolso",
+      paidBy: "Theo",
+      splitType: "Acerto",
+      theoShare: 0,
+      alineShare: value
+    };
+  }
+
+  if (alinePaidTheo) {
+    return {
+      isDebtStatement: true,
+      isCouple: true,
+      category: "Reembolso",
+      paidBy: "Aline",
+      splitType: "Acerto",
+      theoShare: value,
+      alineShare: 0
+    };
+  }
+
+  return null;
+}
+
 function parseQuickEntry(text, fallbackPaidBy = "Theo") {
   const lower = normalizeText(text);
   const value = getFirstMoneyFromText(text);
+
+  const debtStatement = parseDebtStatement(text, value);
+  if (debtStatement) {
+    return {
+      value,
+      type: "Despesa",
+      account: "Conta",
+      familyReimbursement: "",
+      ...debtStatement
+    };
+  }
+
   const isCouple = lower.includes("aline") || lower.includes("theo") || lower.includes("casal") || lower.includes("split") || lower.includes("dividir") || lower.includes("namorada") || lower.includes("namorado");
   const isIncome = lower.includes("recebi") || lower.includes("recebimento") || lower.includes("ganhei") || lower.includes("entrada") || lower.includes("receita") || lower.includes("salario") || lower.includes("pagamento recebido") || lower.includes("deposito");
   const familyReimbursement = getFamilyReimbursementPerson(text);
@@ -759,7 +854,37 @@ export default function ControleFinanceiroApp() {
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               <Card><SectionTitle title="Gastos por forma de pagamento" subtitle="Separação entre Pix, débito, dinheiro e cartão." /><div className="mt-5"><PieChart data={personalByPayment} /></div></Card>
               <Card><SectionTitle title="Fatura do cartão" subtitle={getCreditCardDueLabel(activeMonth)} /><div className="mt-5 rounded-[28px] bg-slate-950 p-6 text-white"><p className="text-sm text-white/60">Total estimado no cartão</p><p className="mt-2 text-4xl font-black tracking-tight">{brl(personalTotals.cardExpense)}</p></div></Card>
-              <Card><SectionTitle title={currentUserId === "aline" ? "Reembolso mãe" : "Reembolso mãe/pai"} subtitle={currentUserId === "aline" ? "Compras pessoais que Aline fez para a mãe no mês." : "Compras pessoais que você fez para seus pais no mês."} /><div className={currentUserId === "aline" ? "mt-5 grid grid-cols-1 gap-3 text-center" : "mt-5 grid grid-cols-2 gap-3 text-center"}><div className="rounded-3xl bg-rose-50 p-4"><p className="text-xs font-bold text-rose-500">Mãe</p><p className="mt-1 text-xl font-black">{brl(personalTotals.momReimbursement)}</p></div>{currentUserId !== "aline" ? <div className="rounded-3xl bg-blue-50 p-4"><p className="text-xs font-bold text-blue-500">Pai</p><p className="mt-1 text-xl font-black">{brl(personalTotals.dadReimbursement)}</p></div> : null}</div><div className="mt-4 rounded-[28px] bg-slate-950 p-5 text-white"><p className="text-sm text-white/60">Total a pedir no mês</p><p className="mt-1 text-3xl font-black">{brl(personalTotals.familyReimbursement)}</p></div><div className="mt-4 space-y-2">{familyReimbursements.length === 0 ? <p className="text-sm text-slate-400">Nenhum reembolso familiar neste mês.</p> : null}{familyReimbursements.map((item) => <div key={item.id} className="flex items-center justify-between rounded-2xl bg-slate-50 p-3 text-sm"><span><b>{item.reimbursementPerson}</b> · {item.description}</span><span className="font-black">{brl(item.value)}</span></div>)}</div></Card>
+              <Card>
+                <SectionTitle
+                  title={currentUserId === "aline" ? "Reembolso mãe" : "Reembolso mãe/pai"}
+                  subtitle={currentUserId === "aline" ? "Compras pessoais que Aline fez para a mãe no mês." : "Compras pessoais que você fez para seus pais no mês."}
+                />
+                <div className={currentUserId === "aline" ? "mt-5 grid grid-cols-1 gap-3 text-center" : "mt-5 grid grid-cols-2 gap-3 text-center"}>
+                  <div className="rounded-3xl bg-rose-50 p-4">
+                    <p className="text-xs font-bold text-rose-500">Mãe</p>
+                    <p className="mt-1 text-xl font-black">{brl(personalTotals.momReimbursement)}</p>
+                  </div>
+                  {currentUserId !== "aline" ? (
+                    <div className="rounded-3xl bg-blue-50 p-4">
+                      <p className="text-xs font-bold text-blue-500">Pai</p>
+                      <p className="mt-1 text-xl font-black">{brl(personalTotals.dadReimbursement)}</p>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="mt-4 rounded-[28px] bg-slate-950 p-5 text-white">
+                  <p className="text-sm text-white/60">Total a pedir no mês</p>
+                  <p className="mt-1 text-3xl font-black">{brl(personalTotals.familyReimbursement)}</p>
+                </div>
+                <div className="mt-4 space-y-2">
+                  {visibleFamilyReimbursements.length === 0 ? <p className="text-sm text-slate-400">Nenhum reembolso familiar neste mês.</p> : null}
+                  {visibleFamilyReimbursements.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between rounded-2xl bg-slate-50 p-3 text-sm">
+                      <span><b>{item.reimbursementPerson}</b> · {item.description}</span>
+                      <span className="font-black">{brl(item.value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
