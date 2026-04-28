@@ -175,7 +175,7 @@ function getBalanceText(balance) {
   return "Tudo zerado entre Theo e Aline";
 }
 
-function getPersonalTotals(transactions) {
+function getPersonalTotals(transactions, currentUserId = "theo") {
   const income = transactions.filter((t) => t.type === "Receita").reduce((sum, t) => sum + Number(t.value || 0), 0);
   const expense = transactions.filter((t) => t.type === "Despesa").reduce((sum, t) => sum + Number(t.value || 0), 0);
   const pixExpense = transactions.filter((t) => t.type === "Despesa" && t.account === "Pix").reduce((sum, t) => sum + Number(t.value || 0), 0);
@@ -184,7 +184,7 @@ function getPersonalTotals(transactions) {
   const cardExpense = transactions.filter((t) => t.type === "Despesa" && t.account === "Cartão").reduce((sum, t) => sum + Number(t.value || 0), 0);
   const momReimbursement = transactions.filter((t) => t.type === "Despesa" && t.reimbursementPerson === "Mãe").reduce((sum, t) => sum + Number(t.value || 0), 0);
   const dadReimbursement = transactions.filter((t) => t.type === "Despesa" && t.reimbursementPerson === "Pai").reduce((sum, t) => sum + Number(t.value || 0), 0);
-  const familyReimbursement = momReimbursement + dadReimbursement;
+  const familyReimbursement = currentUserId === "aline" ? momReimbursement : momReimbursement + dadReimbursement;
   return { income, expense, balance: income - expense, pixExpense, debitExpense, cashExpense, cardExpense, momReimbursement, dadReimbursement, familyReimbursement };
 }
 
@@ -376,7 +376,7 @@ export default function ControleFinanceiroApp() {
 
   const monthTransactions = useMemo(() => transactions.filter((t) => t.userId === currentUserId && monthKey(t.date) === activeMonth), [transactions, activeMonth, currentUserId]);
   const monthCoupleExpenses = useMemo(() => coupleExpenses.filter((t) => monthKey(t.date) === activeMonth), [coupleExpenses, activeMonth]);
-  const personalTotals = useMemo(() => getPersonalTotals(monthTransactions), [monthTransactions]);
+  const personalTotals = useMemo(() => getPersonalTotals(monthTransactions, currentUserId), [monthTransactions, currentUserId]);
   const coupleTotals = useMemo(() => getCoupleTotals(monthCoupleExpenses), [monthCoupleExpenses]);
   const coupleBalance = useMemo(() => calculateCoupleBalance(monthCoupleExpenses), [monthCoupleExpenses]);
 
@@ -399,14 +399,14 @@ export default function ControleFinanceiroApp() {
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => Number(b.value) - Number(a.value));
   }, [monthTransactions]);
 
-  const familyReimbursements = useMemo(() => monthTransactions.filter((t) => t.type === "Despesa" && t.reimbursementPerson).map((t) => ({ ...t, value: Number(t.value || 0) })), [monthTransactions]);
+  const familyReimbursements = useMemo(() => monthTransactions.filter((t) => t.type === "Despesa" && t.reimbursementPerson && (currentUserId !== "aline" || t.reimbursementPerson === "Mãe")).map((t) => ({ ...t, value: Number(t.value || 0) })), [monthTransactions, currentUserId]);
   const filteredTransactions = monthTransactions.filter((t) => (t.description + " " + t.category + " " + t.account + " " + t.type).toLowerCase().includes(search.toLowerCase()));
   const filteredCoupleExpenses = monthCoupleExpenses.filter((t) => (t.description + " " + t.category + " " + t.paidBy + " " + t.splitType).toLowerCase().includes(search.toLowerCase()));
 
   const annualRows = useMemo(() => {
     const months = Array.from(new Set([...transactions.map((t) => monthKey(t.date)), ...coupleExpenses.map((t) => monthKey(t.date)), activeMonth])).sort();
     return months.map((key) => {
-      const pt = getPersonalTotals(transactions.filter((t) => t.userId === currentUserId && monthKey(t.date) === key));
+      const pt = getPersonalTotals(transactions.filter((t) => t.userId === currentUserId && monthKey(t.date) === key), currentUserId);
       const ce = coupleExpenses.filter((t) => monthKey(t.date) === key);
       const ct = getCoupleTotals(ce);
       const cb = calculateCoupleBalance(ce);
@@ -745,14 +745,14 @@ export default function ControleFinanceiroApp() {
               <StatCard label={"Receitas de " + currentUserName} value={brl(personalTotals.income)} icon="↗" />
               <StatCard label="Pix / Débito / Dinheiro" value={brl(personalTotals.pixExpense + personalTotals.debitExpense + personalTotals.cashExpense)} icon="⚡" />
               <StatCard label="Cartão do mês" value={brl(personalTotals.cardExpense)} icon="💳" />
-              <StatCard label="Reembolso mãe/pai" value={brl(personalTotals.familyReimbursement)} icon="👪" />
+              <StatCard label={currentUserId === "aline" ? "Reembolso mãe" : "Reembolso mãe/pai"} value={brl(personalTotals.familyReimbursement)} icon="👪" />
               <StatCard dark label="Saldo pessoal" value={brl(personalTotals.balance)} icon="💰" />
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               <Card><SectionTitle title="Gastos por forma de pagamento" subtitle="Separação entre Pix, débito, dinheiro e cartão." /><div className="mt-5"><PieChart data={personalByPayment} /></div></Card>
               <Card><SectionTitle title="Fatura do cartão" subtitle={getCreditCardDueLabel(activeMonth)} /><div className="mt-5 rounded-[28px] bg-slate-950 p-6 text-white"><p className="text-sm text-white/60">Total estimado no cartão</p><p className="mt-2 text-4xl font-black tracking-tight">{brl(personalTotals.cardExpense)}</p></div></Card>
-              <Card><SectionTitle title="Reembolso mãe/pai" subtitle="Compras pessoais que você fez para seus pais no mês." /><div className="mt-5 grid grid-cols-2 gap-3 text-center"><div className="rounded-3xl bg-rose-50 p-4"><p className="text-xs font-bold text-rose-500">Mãe</p><p className="mt-1 text-xl font-black">{brl(personalTotals.momReimbursement)}</p></div><div className="rounded-3xl bg-blue-50 p-4"><p className="text-xs font-bold text-blue-500">Pai</p><p className="mt-1 text-xl font-black">{brl(personalTotals.dadReimbursement)}</p></div></div><div className="mt-4 rounded-[28px] bg-slate-950 p-5 text-white"><p className="text-sm text-white/60">Total a pedir no mês</p><p className="mt-1 text-3xl font-black">{brl(personalTotals.familyReimbursement)}</p></div><div className="mt-4 space-y-2">{familyReimbursements.length === 0 ? <p className="text-sm text-slate-400">Nenhum reembolso familiar neste mês.</p> : null}{familyReimbursements.map((item) => <div key={item.id} className="flex items-center justify-between rounded-2xl bg-slate-50 p-3 text-sm"><span><b>{item.reimbursementPerson}</b> · {item.description}</span><span className="font-black">{brl(item.value)}</span></div>)}</div></Card>
+              <Card><SectionTitle title={currentUserId === "aline" ? "Reembolso mãe" : "Reembolso mãe/pai"} subtitle={currentUserId === "aline" ? "Compras pessoais que Aline fez para a mãe no mês." : "Compras pessoais que você fez para seus pais no mês."} /><div className={currentUserId === "aline" ? "mt-5 grid grid-cols-1 gap-3 text-center" : "mt-5 grid grid-cols-2 gap-3 text-center"}><div className="rounded-3xl bg-rose-50 p-4"><p className="text-xs font-bold text-rose-500">Mãe</p><p className="mt-1 text-xl font-black">{brl(personalTotals.momReimbursement)}</p></div>{currentUserId !== "aline" ? <div className="rounded-3xl bg-blue-50 p-4"><p className="text-xs font-bold text-blue-500">Pai</p><p className="mt-1 text-xl font-black">{brl(personalTotals.dadReimbursement)}</p></div> : null}</div><div className="mt-4 rounded-[28px] bg-slate-950 p-5 text-white"><p className="text-sm text-white/60">Total a pedir no mês</p><p className="mt-1 text-3xl font-black">{brl(personalTotals.familyReimbursement)}</p></div><div className="mt-4 space-y-2">{familyReimbursements.length === 0 ? <p className="text-sm text-slate-400">Nenhum reembolso familiar neste mês.</p> : null}{familyReimbursements.map((item) => <div key={item.id} className="flex items-center justify-between rounded-2xl bg-slate-50 p-3 text-sm"><span><b>{item.reimbursementPerson}</b> · {item.description}</span><span className="font-black">{brl(item.value)}</span></div>)}</div></Card>
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
