@@ -137,8 +137,10 @@ function isCoupleExpense(text) {
     t.includes("dividir") ||
     t.includes("divisao") ||
     t.includes("rachado") ||
+    t.includes("rachada") ||
     t.includes("rachar") ||
     t.includes("rateado") ||
+    t.includes("rateada") ||
     t.includes("ratear") ||
     t.includes("meio a meio") ||
     t.includes("metade") ||
@@ -153,7 +155,10 @@ function isCoupleExpense(text) {
     t.includes("pago por aline") ||
     t.includes("pago pela aline");
 
-  return hasSplitWord || (hasPaymentExpression && (t.includes("com theo") || t.includes("com aline")));
+  return (
+    hasSplitWord ||
+    (hasPaymentExpression && (t.includes("com theo") || t.includes("com aline")))
+  );
 }
 
 function detectPaidBy(text, userKey) {
@@ -172,6 +177,64 @@ function detectPaidBy(text, userKey) {
   }
 
   return userKey;
+}
+
+function parseSettlement(text, value) {
+  const t = normalize(text);
+
+  const theoOwesAline =
+    t.includes("theo deve") &&
+    (t.includes("para aline") || t.includes("pra aline") || t.includes("a aline"));
+
+  const alineOwesTheo =
+    t.includes("aline deve") &&
+    (t.includes("para theo") || t.includes("pra theo") || t.includes("ao theo"));
+
+  const theoPaidAline =
+    t.includes("theo pagou") &&
+    (t.includes("para aline") || t.includes("pra aline") || t.includes("a aline"));
+
+  const alinePaidTheo =
+    t.includes("aline pagou") &&
+    (t.includes("para theo") || t.includes("pra theo") || t.includes("ao theo"));
+
+  if (theoOwesAline) {
+    return {
+      kind: "debt",
+      paidBy: "Aline",
+      theoShare: value,
+      alineShare: 0
+    };
+  }
+
+  if (alineOwesTheo) {
+    return {
+      kind: "debt",
+      paidBy: "Theo",
+      theoShare: 0,
+      alineShare: value
+    };
+  }
+
+  if (theoPaidAline) {
+    return {
+      kind: "payment",
+      paidBy: "Theo",
+      theoShare: 0,
+      alineShare: value
+    };
+  }
+
+  if (alinePaidTheo) {
+    return {
+      kind: "payment",
+      paidBy: "Aline",
+      theoShare: value,
+      alineShare: 0
+    };
+  }
+
+  return null;
 }
 
 export default async function handler(req, res) {
@@ -220,6 +283,47 @@ export default async function handler(req, res) {
     const finalCategory = reimbursement ? "Reembolso" : detectedCategory;
     const today = new Date().toISOString().slice(0, 10);
 
+    const settlement = parseSettlement(originalText, value);
+
+    if (settlement) {
+      const { data, error } = await supabase
+        .from("couple_expenses")
+        .insert({
+          date: today,
+          description: originalText,
+          category: "Reembolso",
+          paid_by: settlement.paidBy,
+          total: value,
+          theo_share: settlement.theoShare,
+          aline_share: settlement.alineShare,
+          split_type: "Acerto"
+        })
+        .select()
+        .single();
+
+      if (error) {
+        return res.status(400).json({
+          ok: false,
+          table: "couple_expenses",
+          error: error.message,
+          details: error
+        });
+      }
+
+      return res.status(200).json({
+        ok: true,
+        version: "atalho-v4-acertos",
+        table: "couple_expenses",
+        kind: settlement.kind,
+        debugText: originalText,
+        debugNormalizedText: normalize(originalText),
+        debugPaidBy: settlement.paidBy,
+        debugTheoShare: settlement.theoShare,
+        debugAlineShare: settlement.alineShare,
+        data
+      });
+    }
+
     if (isCoupleExpense(originalText)) {
       const paidBy = detectPaidBy(originalText, userKey);
 
@@ -249,8 +353,9 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         ok: true,
-        version: "atalho-v3-casal",
+        version: "atalho-v4-acertos",
         table: "couple_expenses",
+        kind: "couple_expense",
         debugText: originalText,
         debugNormalizedText: normalize(originalText),
         debugCategory: finalCategory,
@@ -285,8 +390,9 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      version: "atalho-v3-casal",
+      version: "atalho-v4-acertos",
       table: "transactions",
+      kind: "personal_transaction",
       debugText: originalText,
       debugNormalizedText: normalize(originalText),
       debugCategory: finalCategory,
