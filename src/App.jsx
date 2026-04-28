@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabase";
 
 const PEOPLE = ["Theo", "Aline"];
@@ -16,23 +16,6 @@ const categoryRules = [
   { category: "Trabalho", words: ["cliente", "servico", "freela", "projeto", "nota", "salario", "recebimento", "dna", "empresa", "trabalho", "pagamento", "honorario"] },
   { category: "Casal", words: ["casal", "aline", "theo", "namorada", "namorado", "split", "dividir", "rachado", "rachada"] },
   { category: "Reembolso", words: ["reembolso", "mae", "pai"] }
-];
-
-const initialTransactions = [
-  { id: 1, userId: "theo", date: "2026-04-01", type: "Receita", description: "Recebimento cliente", category: "Trabalho", account: "Conta PJ", value: 8500 },
-  { id: 2, userId: "theo", date: "2026-04-03", type: "Despesa", description: "Zaffari mercado", category: "Alimentação", account: "Cartão", value: 312.9 },
-  { id: 3, userId: "theo", date: "2026-04-05", type: "Despesa", description: "Uber aeroporto", category: "Transporte", account: "Cartão", value: 58.4 },
-  { id: 4, userId: "theo", date: "2026-05-04", type: "Despesa", description: "Farmacia", category: "Saúde", account: "Pix", value: 89.9 },
-  { id: 5, userId: "aline", date: "2026-04-02", type: "Receita", description: "Salário", category: "Trabalho", account: "Conta", value: 7000 },
-  { id: 6, userId: "aline", date: "2026-04-09", type: "Despesa", description: "Farmacia", category: "Saúde", account: "Pix", value: 120 }
-];
-
-const initialCoupleExpenses = [
-  { id: 101, date: "2026-04-06", description: "Jantar", category: "Alimentação", paidBy: "Theo", total: 180, splitType: "Igual", theoShare: 90, alineShare: 90 },
-  { id: 102, date: "2026-04-08", description: "Mercado", category: "Alimentação", paidBy: "Aline", total: 220, splitType: "Igual", theoShare: 110, alineShare: 110 },
-  { id: 103, date: "2026-04-10", description: "Uber", category: "Transporte", paidBy: "Theo", total: 46.8, splitType: "Igual", theoShare: 23.4, alineShare: 23.4 },
-  { id: 104, date: "2026-04-12", description: "Cinema", category: "Lazer", paidBy: "Aline", total: 92, splitType: "Igual", theoShare: 46, alineShare: 46 },
-  { id: 105, date: "2026-05-02", description: "Mercado", category: "Alimentação", paidBy: "Theo", total: 300, splitType: "Igual", theoShare: 150, alineShare: 150 }
 ];
 
 function brl(value) {
@@ -70,27 +53,14 @@ function normalizeText(text) {
 
 function inferCategory(text) {
   const normalized = normalizeText(text);
-
   const explicitCategory = normalized.match(/categoria ([a-z0-9 ]+)/);
   if (explicitCategory && explicitCategory[1]) {
     const raw = explicitCategory[1].trim();
     const known = categoryRules.find((rule) => normalizeText(rule.category) === raw);
     if (known) return known.category;
   }
-
   const found = categoryRules.find((rule) => rule.words.some((word) => normalized.includes(normalizeText(word))));
   return found ? found.category : "Outros";
-}
-
-function detectAccount(text, isIncome) {
-  const lower = normalizeText(text);
-  if (lower.includes("pix")) return "Pix";
-  if (lower.includes("dinheiro") || lower.includes("cash")) return "Dinheiro";
-  if (lower.includes("debito") || lower.includes("débito")) return "Débito";
-  if (lower.includes("credito") || lower.includes("crédito") || lower.includes("cartao") || lower.includes("cartão") || lower.includes("visa") || lower.includes("master")) return "Cartão";
-  if (lower.includes("pj") || lower.includes("empresa")) return "Conta PJ";
-  if (isIncome) return "Conta";
-  return "Cartão";
 }
 
 function parseMoney(value) {
@@ -118,15 +88,39 @@ function getFirstMoneyFromText(text) {
   return 0;
 }
 
-function getPaidBy(text) {
+function detectAccount(text, isIncome) {
+  const lower = normalizeText(text);
+  if (lower.includes("pix")) return "Pix";
+  if (lower.includes("dinheiro") || lower.includes("cash")) return "Dinheiro";
+  if (lower.includes("debito")) return "Débito";
+  if (lower.includes("credito") || lower.includes("cartao") || lower.includes("visa") || lower.includes("master")) return "Cartão";
+  if (lower.includes("pj") || lower.includes("empresa")) return "Conta PJ";
+  if (isIncome) return "Conta";
+  return "Cartão";
+}
+
+function getFamilyReimbursementPerson(text) {
+  const lower = normalizeText(text);
+  if (lower.includes("mae")) return "Mãe";
+  if (lower.includes("pai")) return "Pai";
+  return "";
+}
+
+function getPaidBy(text, fallback = "Theo") {
   const lower = normalizeText(text);
   if (lower.includes("aline")) return "Aline";
   if (lower.includes("theo")) return "Theo";
+  return fallback;
+}
+
+function getUserNameFromEmail(email) {
+  const lower = normalizeText(email || "");
+  if (lower.includes("aline")) return "Aline";
   return "Theo";
 }
 
-function getUserName(userId) {
-  return userId === "aline" ? "Aline" : "Theo";
+function getUserKeyFromEmail(email) {
+  return getUserNameFromEmail(email).toLowerCase();
 }
 
 function parseSplitFromText(text, total, paidBy) {
@@ -146,48 +140,25 @@ function parseSplitFromText(text, total, paidBy) {
   return { splitType: "Igual", theoShare: total / 2, alineShare: total / 2 };
 }
 
-function getFamilyReimbursementPerson(text) {
-  const lower = normalizeText(text);
-  if (lower.includes("mae")) return "Mãe";
-  if (lower.includes("pai")) return "Pai";
-  return "";
-}
-
-function parseQuickEntry(text) {
+function parseQuickEntry(text, fallbackPaidBy = "Theo") {
   const lower = normalizeText(text);
   const value = getFirstMoneyFromText(text);
-
   const isCouple = lower.includes("aline") || lower.includes("theo") || lower.includes("casal") || lower.includes("split") || lower.includes("dividir") || lower.includes("namorada") || lower.includes("namorado");
-
-  const isIncome =
-    lower.includes("recebi") ||
-    lower.includes("recebimento") ||
-    lower.includes("ganhei") ||
-    lower.includes("entrada") ||
-    lower.includes("receita") ||
-    lower.includes("salario") ||
-    lower.includes("salário") ||
-    lower.includes("pagamento recebido") ||
-    lower.includes("deposito") ||
-    lower.includes("depósito");
-
+  const isIncome = lower.includes("recebi") || lower.includes("recebimento") || lower.includes("ganhei") || lower.includes("entrada") || lower.includes("receita") || lower.includes("salario") || lower.includes("pagamento recebido") || lower.includes("deposito");
   const familyReimbursement = getFamilyReimbursementPerson(text);
+
   let type = isIncome ? "Receita" : "Despesa";
   let category = inferCategory(text);
 
-  if (isIncome && !familyReimbursement) {
-    category = "Trabalho";
-  }
-
+  if (isIncome && !familyReimbursement) category = "Trabalho";
   if (familyReimbursement) {
     type = "Despesa";
     category = "Reembolso";
   }
 
   const account = detectAccount(text, isIncome);
-  const paidBy = getPaidBy(text);
+  const paidBy = getPaidBy(text, fallbackPaidBy);
   const split = parseSplitFromText(text, value, paidBy);
-
   return { value, type, category, account, isCouple, paidBy, familyReimbursement, ...split };
 }
 
@@ -223,8 +194,7 @@ function getCreditCardDueLabel(month) {
   const monthNumber = Number(month.slice(5, 7));
   const nextMonth = monthNumber === 12 ? 1 : monthNumber + 1;
   const nextYear = monthNumber === 12 ? year + 1 : year;
-  const paddedMonth = String(nextMonth).padStart(2, "0");
-  return "Fatura estimada com vencimento em 10/" + paddedMonth + "/" + nextYear;
+  return "Fatura estimada com vencimento em 10/" + String(nextMonth).padStart(2, "0") + "/" + nextYear;
 }
 
 function getCoupleTotals(expenses) {
@@ -235,42 +205,6 @@ function getCoupleTotals(expenses) {
   const alineShare = expenses.reduce((sum, item) => sum + Number(item.alineShare || 0), 0);
   return { total, theoPaid, alinePaid, theoShare, alineShare };
 }
-
-function runTests() {
-  const tests = [
-    { name: "categoria mercado", ok: inferCategory("Zaffari mercado") === "Alimentação" },
-    { name: "categoria transporte", ok: inferCategory("Uber aeroporto") === "Transporte" },
-    { name: "categoria sem acento", ok: inferCategory("farmacia panvel") === "Saúde" },
-    { name: "parse dinheiro virgula", ok: parseMoney("42,90") === 42.9 },
-    { name: "parse dinheiro milhar", ok: parseMoney("1.234,56") === 1234.56 },
-    { name: "quick receita", ok: parseQuickEntry("recebi 8500 de cliente via pix").type === "Receita" },
-    { name: "recebimento DNA tipo", ok: parseQuickEntry("recebimento DNA 3000 reais").type === "Receita" },
-    { name: "recebimento DNA categoria", ok: parseQuickEntry("recebimento DNA 3000 reais").category === "Trabalho" },
-    { name: "recebimento DNA conta", ok: parseQuickEntry("recebimento DNA 3000 reais").account === "Conta" },
-    { name: "cartao explicito", ok: parseQuickEntry("120 zaffari no cartão").account === "Cartão" },
-    { name: "categoria assinatura", ok: parseQuickEntry("openai 100 no cartao").category === "Assinaturas" },
-    { name: "recebimento DNA categoria trabalho", ok: parseQuickEntry("recebimento DNA 3000 reais").category === "Trabalho" },
-    { name: "recebimento DNA conta", ok: parseQuickEntry("recebimento DNA 3000 reais").account === "Conta" },
-    { name: "reembolso mae", ok: parseQuickEntry("120 zaffari para mãe").familyReimbursement === "Mãe" },
-    { name: "reembolso pai", ok: parseQuickEntry("80 farmacia para pai").familyReimbursement === "Pai" },
-    { name: "detecta casal", ok: parseQuickEntry("jantar 120 com Aline").isCouple === true },
-    { name: "divide 50/50", ok: parseQuickEntry("jantar 120 com Aline").alineShare === 60 },
-    { name: "divide percentual", ok: Math.round(parseQuickEntry("jantar 100 70/30 pago pelo Theo").theoShare) === 70 },
-    { name: "saldo casal", ok: calculateCoupleBalance([{ paidBy: "Theo", alineShare: 50 }, { paidBy: "Aline", theoShare: 20 }]) === 30 },
-    { name: "month key", ok: monthKey("2026-04-30") === "2026-04" },
-    { name: "monthly personal total theo", ok: getPersonalTotals(initialTransactions.filter((t) => t.userId === "theo" && monthKey(t.date) === "2026-04")).expense === 371.3 },
-    { name: "monthly personal total aline", ok: getPersonalTotals(initialTransactions.filter((t) => t.userId === "aline" && monthKey(t.date) === "2026-04")).expense === 120 },
-    { name: "monthly card total", ok: getPersonalTotals(initialTransactions.filter((t) => t.userId === "theo" && monthKey(t.date) === "2026-04")).cardExpense === 371.3 },
-    { name: "monthly pix total", ok: getPersonalTotals(initialTransactions.filter((t) => t.userId === "theo" && monthKey(t.date) === "2026-05")).pixExpense === 89.9 },
-    { name: "card due label", ok: getCreditCardDueLabel("2026-04") === "Fatura estimada com vencimento em 10/05/2026" },
-    { name: "monthly couple total", ok: Math.round(getCoupleTotals(initialCoupleExpenses.filter((t) => monthKey(t.date) === "2026-04")).total) === 539 }
-  ];
-  const failed = tests.filter((test) => !test.ok);
-  if (failed.length) console.warn("Testes falharam:", failed.map((t) => t.name).join(", "));
-  return { total: tests.length, failed: failed.length };
-}
-
-const testResult = runTests();
 
 function PieChart({ data }) {
   const total = data.reduce((sum, d) => sum + Number(d.value || 0), 0);
@@ -355,8 +289,11 @@ function SectionTitle({ title, subtitle }) {
 }
 
 export default function ControleFinanceiroApp() {
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [activeTab, setActiveTab] = useState("Casal");
-  const [currentUserId, setCurrentUserId] = useState("theo");
   const [activeMonth, setActiveMonth] = useState("2026-04");
   const [closedMonths, setClosedMonths] = useState({});
   const [transactions, setTransactions] = useState([]);
@@ -367,20 +304,44 @@ export default function ControleFinanceiroApp() {
   const [form, setForm] = useState({ date: "2026-04-27", type: "Despesa", description: "", category: "Outros", account: "Cartão", value: "" });
   const [coupleForm, setCoupleForm] = useState({ date: "2026-04-27", description: "", category: "Alimentação", paidBy: "Theo", total: "", splitType: "Igual", theoShare: "", alineShare: "" });
 
+  const currentUserId = user ? getUserKeyFromEmail(user.email) : "theo";
+  const currentUserName = user ? getUserNameFromEmail(user.email) : "Theo";
+  const currentMonthIsClosed = Boolean(closedMonths[activeMonth]);
+
   useEffect(() => {
-    loadSupabaseData();
+    async function initAuth() {
+      const { data } = await supabase.auth.getSession();
+      setUser(data.session?.user || null);
+      setAuthLoading(false);
+    }
+
+    initAuth();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => listener.subscription.unsubscribe();
   }, []);
 
-  async function loadSupabaseData() {
-    const { data: transactionData, error: transactionError } = await supabase
-      .from("transactions")
-      .select("*")
-      .order("date", { ascending: false });
+  useEffect(() => {
+    if (!user) return;
+    loadSupabaseData();
 
-    const { data: coupleData, error: coupleError } = await supabase
-      .from("couple_expenses")
-      .select("*")
-      .order("date", { ascending: false });
+    const channel = supabase
+      .channel("finance-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => loadSupabaseData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "couple_expenses" }, () => loadSupabaseData())
+      .subscribe((status) => console.log("REALTIME STATUS:", status));
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  async function loadSupabaseData() {
+    const { data: transactionData, error: transactionError } = await supabase.from("transactions").select("*").order("date", { ascending: false });
+    const { data: coupleData, error: coupleError } = await supabase.from("couple_expenses").select("*").order("date", { ascending: false });
 
     if (transactionError || coupleError) {
       console.log("SUPABASE LOAD ERROR", transactionError, coupleError);
@@ -413,10 +374,8 @@ export default function ControleFinanceiroApp() {
     })));
   }
 
-  const currentMonthIsClosed = Boolean(closedMonths[activeMonth]);
   const monthTransactions = useMemo(() => transactions.filter((t) => t.userId === currentUserId && monthKey(t.date) === activeMonth), [transactions, activeMonth, currentUserId]);
   const monthCoupleExpenses = useMemo(() => coupleExpenses.filter((t) => monthKey(t.date) === activeMonth), [coupleExpenses, activeMonth]);
-
   const personalTotals = useMemo(() => getPersonalTotals(monthTransactions), [monthTransactions]);
   const coupleTotals = useMemo(() => getCoupleTotals(monthCoupleExpenses), [monthCoupleExpenses]);
   const coupleBalance = useMemo(() => calculateCoupleBalance(monthCoupleExpenses), [monthCoupleExpenses]);
@@ -440,10 +399,7 @@ export default function ControleFinanceiroApp() {
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => Number(b.value) - Number(a.value));
   }, [monthTransactions]);
 
-  const familyReimbursements = useMemo(() => {
-    return monthTransactions.filter((t) => t.type === "Despesa" && t.reimbursementPerson).map((t) => ({ ...t, value: Number(t.value || 0) }));
-  }, [monthTransactions]);
-
+  const familyReimbursements = useMemo(() => monthTransactions.filter((t) => t.type === "Despesa" && t.reimbursementPerson).map((t) => ({ ...t, value: Number(t.value || 0) })), [monthTransactions]);
   const filteredTransactions = monthTransactions.filter((t) => (t.description + " " + t.category + " " + t.account + " " + t.type).toLowerCase().includes(search.toLowerCase()));
   const filteredCoupleExpenses = monthCoupleExpenses.filter((t) => (t.description + " " + t.category + " " + t.paidBy + " " + t.splitType).toLowerCase().includes(search.toLowerCase()));
 
@@ -457,6 +413,23 @@ export default function ControleFinanceiroApp() {
       return { key, personalExpense: pt.expense, personalIncome: pt.income, coupleTotal: ct.total, coupleBalance: cb, theoPaid: ct.theoPaid, alinePaid: ct.alinePaid, closed: Boolean(closedMonths[key]) };
     });
   }, [transactions, coupleExpenses, closedMonths, activeMonth, currentUserId]);
+
+  async function handleLogin() {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setMessage("Erro no login: confira e-mail e senha.");
+      return;
+    }
+    setUser(data.user);
+    setMessage("");
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setUser(null);
+    setTransactions([]);
+    setCoupleExpenses([]);
+  }
 
   function guardClosedMonth(date) {
     if (closedMonths[monthKey(date)]) {
@@ -487,6 +460,7 @@ export default function ControleFinanceiroApp() {
       return false;
     }
     if (!guardClosedMonth(data.date)) return false;
+
     const { data: inserted, error } = await supabase
       .from("transactions")
       .insert({
@@ -504,7 +478,7 @@ export default function ControleFinanceiroApp() {
 
     if (error) {
       console.log("SUPABASE INSERT TRANSACTION ERROR", error);
-      setMessage("Erro ao salvar lançamento pessoal no Supabase.");
+      setMessage("Erro ao salvar lançamento pessoal.");
       return false;
     }
 
@@ -520,7 +494,7 @@ export default function ControleFinanceiroApp() {
       reimbursementPerson: inserted.reimbursement_person || ""
     }, ...prev]);
 
-    setMessage("Lançamento pessoal salvo para " + getUserName(currentUserId) + ".");
+    setMessage("Lançamento pessoal salvo para " + currentUserName + ".");
     return true;
   }
 
@@ -531,6 +505,7 @@ export default function ControleFinanceiroApp() {
       return false;
     }
     if (!guardClosedMonth(data.date)) return false;
+
     let theoShare = parseMoney(data.theoShare);
     let alineShare = parseMoney(data.alineShare);
     const splitType = data.splitType || "Igual";
@@ -542,6 +517,7 @@ export default function ControleFinanceiroApp() {
       setMessage("Na divisão personalizada, Theo + Aline precisa fechar o valor total.");
       return false;
     }
+
     const { data: inserted, error } = await supabase
       .from("couple_expenses")
       .insert({
@@ -559,7 +535,7 @@ export default function ControleFinanceiroApp() {
 
     if (error) {
       console.log("SUPABASE INSERT COUPLE ERROR", error);
-      setMessage("Erro ao salvar despesa do casal no Supabase.");
+      setMessage("Erro ao salvar despesa do casal.");
       return false;
     }
 
@@ -575,12 +551,12 @@ export default function ControleFinanceiroApp() {
       splitType: inserted.split_type || "Igual"
     }, ...prev]);
 
-    setMessage("Despesa do casal salva no Supabase.");
+    setMessage("Despesa do casal salva.");
     return true;
   }
 
   async function handleQuickAdd() {
-    const parsed = parseQuickEntry(quickText);
+    const parsed = parseQuickEntry(quickText, currentUserName);
     const date = activeMonth + "-27";
     if (parsed.isCouple) {
       const saved = await addCoupleExpense({ date, description: quickText, category: parsed.category === "Casal" ? "Alimentação" : parsed.category, paidBy: parsed.paidBy, total: parsed.value, splitType: parsed.splitType, theoShare: parsed.theoShare, alineShare: parsed.alineShare });
@@ -604,7 +580,7 @@ export default function ControleFinanceiroApp() {
     if (saved) setCoupleForm({ ...coupleForm, description: "", total: "", splitType: "Igual", theoShare: "", alineShare: "" });
   }
 
-  function settleBalance() {
+  async function settleBalance() {
     if (currentMonthIsClosed) {
       setMessage("Este mês está fechado. Reabra para registrar acerto.");
       return;
@@ -616,50 +592,27 @@ export default function ControleFinanceiroApp() {
     const payer = coupleBalance > 0 ? "Aline" : "Theo";
     const receiver = coupleBalance > 0 ? "Theo" : "Aline";
     const amount = Math.abs(coupleBalance);
-    addCoupleExpense({
-      date: activeMonth + "-28",
-      description: "Acerto: " + payer + " pagou " + receiver,
-      category: "Reembolso",
-      paidBy: payer,
-      total: amount,
-      splitType: "Acerto",
-      theoShare: payer === "Aline" ? amount : 0,
-      alineShare: payer === "Theo" ? amount : 0
-    });
+    await addCoupleExpense({ date: activeMonth + "-28", description: "Acerto: " + payer + " pagou " + receiver, category: "Reembolso", paidBy: payer, total: amount, splitType: "Acerto", theoShare: payer === "Aline" ? amount : 0, alineShare: payer === "Theo" ? amount : 0 });
   }
 
   async function removePersonalTransaction(item) {
     if (!guardClosedMonth(item.date)) return;
-
-    const { error } = await supabase
-      .from("transactions")
-      .delete()
-      .eq("id", item.id);
-
+    const { error } = await supabase.from("transactions").delete().eq("id", item.id);
     if (error) {
-      console.log("SUPABASE DELETE TRANSACTION ERROR", error);
       setMessage("Erro ao remover lançamento pessoal.");
       return;
     }
-
     setTransactions((prev) => prev.filter((t) => t.id !== item.id));
     setMessage("Lançamento pessoal removido.");
   }
 
   async function removeCoupleExpense(item) {
     if (!guardClosedMonth(item.date)) return;
-
-    const { error } = await supabase
-      .from("couple_expenses")
-      .delete()
-      .eq("id", item.id);
-
+    const { error } = await supabase.from("couple_expenses").delete().eq("id", item.id);
     if (error) {
-      console.log("SUPABASE DELETE COUPLE ERROR", error);
       setMessage("Erro ao remover despesa do casal.");
       return;
     }
-
     setCoupleExpenses((prev) => prev.filter((t) => t.id !== item.id));
     setMessage("Despesa do casal removida.");
   }
@@ -670,32 +623,47 @@ export default function ControleFinanceiroApp() {
     setCoupleForm((prev) => ({ ...prev, date: nextMonth + "-27" }));
   }
 
+  if (authLoading) {
+    return <div className="min-h-screen bg-slate-100 p-6 text-slate-900">Carregando...</div>;
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-slate-100 p-4 md:p-8 text-slate-900">
+        <div className="mx-auto max-w-md space-y-4">
+          <div className="rounded-[36px] bg-slate-950 p-8 text-white shadow-xl">
+            <p className="mb-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-violet-100 ring-1 ring-white/10">Theo & Aline</p>
+            <h1 className="text-4xl font-black tracking-tight">Entrar</h1>
+            <p className="mt-3 text-sm text-white/60">A aba pessoal é privada por usuário. A aba casal é compartilhada.</p>
+          </div>
+
+          {message ? <div className="rounded-3xl bg-slate-950 px-5 py-4 text-sm font-medium text-white shadow-sm">{message}</div> : null}
+
+          <Card>
+            <div className="space-y-3">
+              <Input placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <Button type="button" onClick={handleLogin} className="w-full">Entrar</Button>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 p-4 md:p-8 text-slate-900">
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="overflow-hidden rounded-[36px] bg-slate-950 p-6 text-white shadow-xl shadow-violet-100 md:p-8">
           <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="mb-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-violet-100 ring-1 ring-white/10">Theo & Aline · protótipo local</p>
+              <p className="mb-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-violet-100 ring-1 ring-white/10">Logado como {currentUserName}</p>
               <h1 className="text-4xl font-black tracking-tight md:text-5xl">Finanças sem planilha.</h1>
-              <p className="mt-3 max-w-2xl text-sm text-white/60">Controle pessoal privado + divisão de casal compartilhada com mês ativo, fechamento mensal e visão anual.</p>
+              <p className="mt-3 max-w-2xl text-sm text-white/60">Pessoal privado + casal compartilhado com Supabase.</p>
             </div>
-            <Button type="button" className="bg-white text-slate-950 hover:bg-violet-50 shadow-none">✨ Futuro: conectar Supabase</Button>
+            <Button type="button" className="bg-white text-slate-950 hover:bg-violet-50 shadow-none" onClick={handleLogout}>Sair</Button>
           </div>
         </div>
-
-        <Card>
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <SectionTitle title="Usuário ativo" subtitle="No Supabase, isso vira login separado. Aqui estamos simulando os perfis." />
-              <p className="mt-2 text-sm font-bold text-slate-700">Perfil atual: {getUserName(currentUserId)}</p>
-            </div>
-            <div className="flex gap-2">
-              <Button type="button" variant={currentUserId === "theo" ? "primary" : "secondary"} onClick={() => setCurrentUserId("theo")}>Theo</Button>
-              <Button type="button" variant={currentUserId === "aline" ? "primary" : "secondary"} onClick={() => setCurrentUserId("aline")}>Aline</Button>
-            </div>
-          </div>
-        </Card>
 
         <Card>
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -703,9 +671,9 @@ export default function ControleFinanceiroApp() {
               <SectionTitle title="Competência" subtitle="Escolha o mês de trabalho e feche quando terminar." />
               <p className="mt-2 text-sm font-bold text-slate-700">Status: {currentMonthIsClosed ? "Fechado" : "Aberto"}</p>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input type="month" value={activeMonth} onChange={(e) => syncFormMonth(e.target.value)} className="sm:w-48" />
-              {currentMonthIsClosed ? <Button type="button" variant="secondary" onClick={reopenMonth}>Reabrir mês</Button> : <Button type="button" onClick={closeMonth}>Fechar mês</Button>}
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+              <Input type="month" value={activeMonth} onChange={(e) => syncFormMonth(e.target.value)} className="w-full min-w-0" />
+              {currentMonthIsClosed ? <Button type="button" variant="secondary" onClick={reopenMonth} className="w-full sm:w-auto">Reabrir mês</Button> : <Button type="button" onClick={closeMonth} className="w-full sm:w-auto">Fechar mês</Button>}
             </div>
           </div>
         </Card>
@@ -713,7 +681,7 @@ export default function ControleFinanceiroApp() {
         <div className="sticky top-3 z-10 rounded-[24px] bg-white/70 p-2 shadow-sm ring-1 ring-black/5 backdrop-blur">
           <div className="grid grid-cols-3 gap-2">
             <Button type="button" variant={activeTab === "Casal" ? "primary" : "secondary"} onClick={() => setActiveTab("Casal")}>Casal</Button>
-            <Button type="button" variant={activeTab === "Pessoal" ? "primary" : "secondary"} onClick={() => setActiveTab("Pessoal")}>Pessoal de {getUserName(currentUserId)}</Button>
+            <Button type="button" variant={activeTab === "Pessoal" ? "primary" : "secondary"} onClick={() => setActiveTab("Pessoal")}>Pessoal</Button>
             <Button type="button" variant={activeTab === "Anual" ? "primary" : "secondary"} onClick={() => setActiveTab("Anual")}>Anual</Button>
           </div>
         </div>
@@ -722,9 +690,9 @@ export default function ControleFinanceiroApp() {
 
         {activeTab !== "Anual" ? (
           <Card className="bg-white/80 backdrop-blur">
-            <SectionTitle title="Lançamento inteligente" subtitle="Escreva naturalmente. O app entende valor, categoria, pagador e divisão." />
+            <SectionTitle title="Lançamento inteligente" subtitle="Ex: recebimento DNA 3000 reais / jantar 120 pago pelo Theo / 120 zaffari para mãe" />
             <div className="mt-4 flex flex-col gap-3 md:flex-row">
-              <Input value={quickText} onChange={(e) => setQuickText(e.target.value)} placeholder="Ex: jantar 120 pago pelo Theo / mercado 200 70/30 pago pela Aline / 120 zaffari para mãe" />
+              <Input value={quickText} onChange={(e) => setQuickText(e.target.value)} placeholder="Digite o lançamento" />
               <Button onClick={handleQuickAdd} type="button" className="md:w-44" disabled={currentMonthIsClosed}>Adicionar</Button>
             </div>
           </Card>
@@ -765,16 +733,8 @@ export default function ControleFinanceiroApp() {
             </div>
 
             <Card>
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <SectionTitle title="Histórico do casal" subtitle={"Testes internos: " + (testResult.total - testResult.failed) + "/" + testResult.total + " passaram."} />
-                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar" className="md:max-w-xs" />
-              </div>
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead><tr className="border-b text-left text-slate-400"><th className="py-3">Data</th><th>Descrição</th><th>Categoria</th><th>Pagou</th><th>Divisão</th><th>Theo</th><th>Aline</th><th className="text-right">Total</th><th></th></tr></thead>
-                  <tbody>{filteredCoupleExpenses.map((t) => <tr key={t.id} className="border-b last:border-0"><td className="py-4 whitespace-nowrap">{String(t.date).split("-").reverse().join("/")}</td><td className="font-bold">{t.description}</td><td>{t.category}</td><td>{t.paidBy}</td><td>{t.splitType}</td><td>{brl(t.theoShare)}</td><td>{brl(t.alineShare)}</td><td className="text-right font-black whitespace-nowrap">{brl(t.total)}</td><td className="text-right"><button onClick={() => removeCoupleExpense(t)} className="rounded-xl p-2 hover:bg-slate-100" type="button">🗑️</button></td></tr>)}</tbody>
-                </table>
-              </div>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><SectionTitle title="Histórico do casal" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar" className="md:max-w-xs" /></div>
+              <div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-slate-400"><th className="py-3">Data</th><th>Descrição</th><th>Categoria</th><th>Pagou</th><th>Divisão</th><th>Theo</th><th>Aline</th><th className="text-right">Total</th><th></th></tr></thead><tbody>{filteredCoupleExpenses.map((t) => <tr key={t.id} className="border-b last:border-0"><td className="py-4 whitespace-nowrap">{String(t.date).split("-").reverse().join("/")}</td><td className="font-bold">{t.description}</td><td>{t.category}</td><td>{t.paidBy}</td><td>{t.splitType}</td><td>{brl(t.theoShare)}</td><td>{brl(t.alineShare)}</td><td className="text-right font-black whitespace-nowrap">{brl(t.total)}</td><td className="text-right"><button onClick={() => removeCoupleExpense(t)} className="rounded-xl p-2 hover:bg-slate-100" type="button">🗑️</button></td></tr>)}</tbody></table></div>
             </Card>
           </>
         ) : null}
@@ -782,7 +742,7 @@ export default function ControleFinanceiroApp() {
         {activeTab === "Pessoal" ? (
           <>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
-              <StatCard label={"Receitas de " + getUserName(currentUserId)} value={brl(personalTotals.income)} icon="↗" />
+              <StatCard label={"Receitas de " + currentUserName} value={brl(personalTotals.income)} icon="↗" />
               <StatCard label="Pix / Débito / Dinheiro" value={brl(personalTotals.pixExpense + personalTotals.debitExpense + personalTotals.cashExpense)} icon="⚡" />
               <StatCard label="Cartão do mês" value={brl(personalTotals.cardExpense)} icon="💳" />
               <StatCard label="Reembolso mãe/pai" value={brl(personalTotals.familyReimbursement)} icon="👪" />
@@ -790,100 +750,24 @@ export default function ControleFinanceiroApp() {
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <Card>
-                <SectionTitle title="Gastos por forma de pagamento" subtitle="Separação entre Pix, débito, dinheiro e cartão." />
-                <div className="mt-5"><PieChart data={personalByPayment} /></div>
-              </Card>
-
-              <Card>
-                <SectionTitle title="Fatura do cartão" subtitle={getCreditCardDueLabel(activeMonth)} />
-                <div className="mt-5 rounded-[28px] bg-slate-950 p-6 text-white">
-                  <p className="text-sm text-white/60">Total estimado no cartão</p>
-                  <p className="mt-2 text-4xl font-black tracking-tight">{brl(personalTotals.cardExpense)}</p>
-                  <p className="mt-3 text-xs text-white/50">Considera lançamentos pessoais classificados como Cartão dentro da competência selecionada.</p>
-                </div>
-                <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-                  <div className="rounded-3xl bg-slate-50 p-4"><p className="text-xs font-bold text-slate-500">Pix</p><p className="mt-1 font-black">{brl(personalTotals.pixExpense)}</p></div>
-                  <div className="rounded-3xl bg-slate-50 p-4"><p className="text-xs font-bold text-slate-500">Débito</p><p className="mt-1 font-black">{brl(personalTotals.debitExpense)}</p></div>
-                  <div className="rounded-3xl bg-slate-50 p-4"><p className="text-xs font-bold text-slate-500">Dinheiro</p><p className="mt-1 font-black">{brl(personalTotals.cashExpense)}</p></div>
-                </div>
-              </Card>
-
-              <Card>
-                <SectionTitle title="Reembolso mãe/pai" subtitle="Compras pessoais que você fez para seus pais no mês." />
-                <div className="mt-5 grid grid-cols-2 gap-3 text-center">
-                  <div className="rounded-3xl bg-rose-50 p-4"><p className="text-xs font-bold text-rose-500">Mãe</p><p className="mt-1 text-xl font-black">{brl(personalTotals.momReimbursement)}</p></div>
-                  <div className="rounded-3xl bg-blue-50 p-4"><p className="text-xs font-bold text-blue-500">Pai</p><p className="mt-1 text-xl font-black">{brl(personalTotals.dadReimbursement)}</p></div>
-                </div>
-                <div className="mt-4 rounded-[28px] bg-slate-950 p-5 text-white">
-                  <p className="text-sm text-white/60">Total a pedir no mês</p>
-                  <p className="mt-1 text-3xl font-black">{brl(personalTotals.familyReimbursement)}</p>
-                </div>
-                <div className="mt-4 space-y-2">
-                  {familyReimbursements.length === 0 ? <p className="text-sm text-slate-400">Nenhum reembolso familiar neste mês.</p> : null}
-                  {familyReimbursements.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between rounded-2xl bg-slate-50 p-3 text-sm">
-                      <span><b>{item.reimbursementPerson}</b> · {item.description}</span>
-                      <span className="font-black">{brl(item.value)}</span>
-                    </div>
-                  ))}
-                </div>
-              </Card>
+              <Card><SectionTitle title="Gastos por forma de pagamento" subtitle="Separação entre Pix, débito, dinheiro e cartão." /><div className="mt-5"><PieChart data={personalByPayment} /></div></Card>
+              <Card><SectionTitle title="Fatura do cartão" subtitle={getCreditCardDueLabel(activeMonth)} /><div className="mt-5 rounded-[28px] bg-slate-950 p-6 text-white"><p className="text-sm text-white/60">Total estimado no cartão</p><p className="mt-2 text-4xl font-black tracking-tight">{brl(personalTotals.cardExpense)}</p></div></Card>
+              <Card><SectionTitle title="Reembolso mãe/pai" subtitle="Compras pessoais que você fez para seus pais no mês." /><div className="mt-5 grid grid-cols-2 gap-3 text-center"><div className="rounded-3xl bg-rose-50 p-4"><p className="text-xs font-bold text-rose-500">Mãe</p><p className="mt-1 text-xl font-black">{brl(personalTotals.momReimbursement)}</p></div><div className="rounded-3xl bg-blue-50 p-4"><p className="text-xs font-bold text-blue-500">Pai</p><p className="mt-1 text-xl font-black">{brl(personalTotals.dadReimbursement)}</p></div></div><div className="mt-4 rounded-[28px] bg-slate-950 p-5 text-white"><p className="text-sm text-white/60">Total a pedir no mês</p><p className="mt-1 text-3xl font-black">{brl(personalTotals.familyReimbursement)}</p></div><div className="mt-4 space-y-2">{familyReimbursements.length === 0 ? <p className="text-sm text-slate-400">Nenhum reembolso familiar neste mês.</p> : null}{familyReimbursements.map((item) => <div key={item.id} className="flex items-center justify-between rounded-2xl bg-slate-50 p-3 text-sm"><span><b>{item.reimbursementPerson}</b> · {item.description}</span><span className="font-black">{brl(item.value)}</span></div>)}</div></Card>
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-              <Card className="lg:col-span-2">
-                <SectionTitle title={"Novo lançamento pessoal de " + getUserName(currentUserId)} subtitle="Privado: só aparece para o usuário ativo." />
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-                  <Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}><option>Despesa</option><option>Receita</option></Select>
-                  <Input placeholder="Descrição" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value, category: inferCategory(e.target.value) })} className="col-span-2" />
-                  <Input placeholder="Valor" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} />
-                  <Input placeholder="Categoria" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-                  <Select value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })} className="col-span-2"><option>Cartão</option><option>Pix</option><option>Débito</option><option>Dinheiro</option><option>Conta PJ</option></Select>
-                </div>
-                <Button onClick={handleManualAdd} className="mt-4 w-full" type="button" disabled={currentMonthIsClosed}>Salvar lançamento</Button>
-              </Card>
-
-              <Card className="lg:col-span-3">
-                <SectionTitle title={"Gastos pessoais em " + monthLabel(activeMonth)} subtitle="Pizza de distribuição das despesas." />
-                <div className="mt-5"><PieChart data={byCategory} /></div>
-              </Card>
+              <Card className="lg:col-span-2"><SectionTitle title={"Novo lançamento pessoal de " + currentUserName} subtitle="Privado: só aparece para o usuário logado." /><div className="mt-4 grid grid-cols-2 gap-3"><Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /><Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}><option>Despesa</option><option>Receita</option></Select><Input placeholder="Descrição" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value, category: inferCategory(e.target.value) })} className="col-span-2" /><Input placeholder="Valor" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} /><Input placeholder="Categoria" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /><Select value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })} className="col-span-2"><option>Cartão</option><option>Pix</option><option>Débito</option><option>Dinheiro</option><option>Conta PJ</option><option>Conta</option></Select></div><Button onClick={handleManualAdd} className="mt-4 w-full" type="button" disabled={currentMonthIsClosed}>Salvar lançamento</Button></Card>
+              <Card className="lg:col-span-3"><SectionTitle title={"Gastos pessoais em " + monthLabel(activeMonth)} subtitle="Pizza de distribuição das despesas." /><div className="mt-5"><PieChart data={byCategory} /></div></Card>
             </div>
 
-            <Card>
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <SectionTitle title={"Lançamentos pessoais de " + getUserName(currentUserId)} subtitle={"Testes internos: " + (testResult.total - testResult.failed) + "/" + testResult.total + " passaram."} />
-                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar" className="md:max-w-xs" />
-              </div>
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead><tr className="border-b text-left text-slate-400"><th className="py-3">Data</th><th>Tipo</th><th>Descrição</th><th>Categoria</th><th>Conta</th><th className="text-right">Valor</th><th></th></tr></thead>
-                  <tbody>{filteredTransactions.map((t) => <tr key={t.id} className="border-b last:border-0"><td className="py-4 whitespace-nowrap">{String(t.date).split("-").reverse().join("/")}</td><td>{t.type}</td><td className="font-bold">{t.description}</td><td>{t.category}</td><td>{t.account}</td><td className="text-right font-black whitespace-nowrap">{brl(t.value)}</td><td className="text-right"><button onClick={() => removePersonalTransaction(t)} className="rounded-xl p-2 hover:bg-slate-100" type="button">🗑️</button></td></tr>)}</tbody>
-                </table>
-              </div>
-            </Card>
+            <Card><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><SectionTitle title={"Lançamentos pessoais de " + currentUserName} /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar" className="md:max-w-xs" /></div><div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-slate-400"><th className="py-3">Data</th><th>Tipo</th><th>Descrição</th><th>Categoria</th><th>Conta</th><th className="text-right">Valor</th><th></th></tr></thead><tbody>{filteredTransactions.map((t) => <tr key={t.id} className="border-b last:border-0"><td className="py-4 whitespace-nowrap">{String(t.date).split("-").reverse().join("/")}</td><td>{t.type}</td><td className="font-bold">{t.description}</td><td>{t.category}</td><td>{t.account}</td><td className="text-right font-black whitespace-nowrap">{brl(t.value)}</td><td className="text-right"><button onClick={() => removePersonalTransaction(t)} className="rounded-xl p-2 hover:bg-slate-100" type="button">🗑️</button></td></tr>)}</tbody></table></div></Card>
           </>
         ) : null}
 
         {activeTab === "Anual" ? (
           <>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              <StatCard dark label="Meses no painel" value={String(annualRows.length)} icon="📅" />
-              <StatCard label="Gasto casal no ano" value={brl(annualRows.reduce((s, r) => s + r.coupleTotal, 0))} icon="🤝" />
-              <StatCard label={"Despesa pessoal de " + getUserName(currentUserId)} value={brl(annualRows.reduce((s, r) => s + r.personalExpense, 0))} icon="↘" />
-              <StatCard label={"Receita pessoal de " + getUserName(currentUserId)} value={brl(annualRows.reduce((s, r) => s + r.personalIncome, 0))} icon="↗" />
-            </div>
-
-            <Card>
-              <SectionTitle title="Visão anual" subtitle="Resumo consolidado por mês, com pessoal privado do usuário ativo e casal compartilhado." />
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead><tr className="border-b text-left text-slate-400"><th className="py-3">Mês</th><th>Status</th><th>Gasto casal</th><th>Despesa pessoal</th><th>Receita pessoal</th><th>Pago Theo</th><th>Pago Aline</th><th>Saldo casal</th></tr></thead>
-                  <tbody>{annualRows.map((row) => <tr key={row.key} className="border-b last:border-0"><td className="py-4 font-bold">{monthLabel(row.key)}</td><td>{row.closed ? "Fechado" : "Aberto"}</td><td>{brl(row.coupleTotal)}</td><td>{brl(row.personalExpense)}</td><td>{brl(row.personalIncome)}</td><td>{brl(row.theoPaid)}</td><td>{brl(row.alinePaid)}</td><td className="font-bold">{getBalanceText(row.coupleBalance)}</td></tr>)}</tbody>
-                </table>
-              </div>
-            </Card>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4"><StatCard dark label="Meses no painel" value={String(annualRows.length)} icon="📅" /><StatCard label="Gasto casal no ano" value={brl(annualRows.reduce((s, r) => s + r.coupleTotal, 0))} icon="🤝" /><StatCard label={"Despesa pessoal de " + currentUserName} value={brl(annualRows.reduce((s, r) => s + r.personalExpense, 0))} icon="↘" /><StatCard label={"Receita pessoal de " + currentUserName} value={brl(annualRows.reduce((s, r) => s + r.personalIncome, 0))} icon="↗" /></div>
+            <Card><SectionTitle title="Visão anual" subtitle="Resumo por mês, com pessoal privado do usuário logado e casal compartilhado." /><div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-slate-400"><th className="py-3">Mês</th><th>Status</th><th>Gasto casal</th><th>Despesa pessoal</th><th>Receita pessoal</th><th>Pago Theo</th><th>Pago Aline</th><th>Saldo casal</th></tr></thead><tbody>{annualRows.map((row) => <tr key={row.key} className="border-b last:border-0"><td className="py-4 font-bold">{monthLabel(row.key)}</td><td>{row.closed ? "Fechado" : "Aberto"}</td><td>{brl(row.coupleTotal)}</td><td>{brl(row.personalExpense)}</td><td>{brl(row.personalIncome)}</td><td>{brl(row.theoPaid)}</td><td>{brl(row.alinePaid)}</td><td className="font-bold">{getBalanceText(row.coupleBalance)}</td></tr>)}</tbody></table></div></Card>
           </>
         ) : null}
       </div>
