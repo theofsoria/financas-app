@@ -129,6 +129,51 @@ function detectReimbursement(text) {
   return null;
 }
 
+function isCoupleExpense(text) {
+  const t = normalize(text);
+
+  const hasSplitWord =
+    t.includes("dividido") ||
+    t.includes("dividir") ||
+    t.includes("divisao") ||
+    t.includes("rachado") ||
+    t.includes("rachar") ||
+    t.includes("rateado") ||
+    t.includes("ratear") ||
+    t.includes("meio a meio") ||
+    t.includes("metade") ||
+    t.includes("50/50") ||
+    t.includes("casal");
+
+  const hasPaymentExpression =
+    t.includes("pago por mim") ||
+    t.includes("paguei") ||
+    t.includes("pago por theo") ||
+    t.includes("pago pelo theo") ||
+    t.includes("pago por aline") ||
+    t.includes("pago pela aline");
+
+  return hasSplitWord || (hasPaymentExpression && (t.includes("com theo") || t.includes("com aline")));
+}
+
+function detectPaidBy(text, userKey) {
+  const t = normalize(text);
+
+  if (t.includes("pago por mim") || t.includes("paguei")) {
+    return userKey;
+  }
+
+  if (t.includes("pago por theo") || t.includes("pago pelo theo")) {
+    return "theo";
+  }
+
+  if (t.includes("pago por aline") || t.includes("pago pela aline")) {
+    return "aline";
+  }
+
+  return userKey;
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
@@ -173,12 +218,52 @@ export default async function handler(req, res) {
     const detectedCategory = detectCategory(originalText);
     const reimbursement = detectReimbursement(originalText);
     const finalCategory = reimbursement ? "Reembolso" : detectedCategory;
+    const today = new Date().toISOString().slice(0, 10);
+
+    if (isCoupleExpense(originalText)) {
+      const paidBy = detectPaidBy(originalText, userKey);
+
+      const { data, error } = await supabase
+        .from("couple_expenses")
+        .insert({
+          date: today,
+          description: originalText,
+          category: finalCategory,
+          paid_by: paidBy,
+          total: value,
+          theo_share: value / 2,
+          aline_share: value / 2,
+          split_type: "50/50"
+        })
+        .select()
+        .single();
+
+      if (error) {
+        return res.status(400).json({
+          ok: false,
+          table: "couple_expenses",
+          error: error.message,
+          details: error
+        });
+      }
+
+      return res.status(200).json({
+        ok: true,
+        version: "atalho-v3-casal",
+        table: "couple_expenses",
+        debugText: originalText,
+        debugNormalizedText: normalize(originalText),
+        debugCategory: finalCategory,
+        debugPaidBy: paidBy,
+        data
+      });
+    }
 
     const { data, error } = await supabase
       .from("transactions")
       .insert({
         user_key: userKey,
-        date: new Date().toISOString().slice(0, 10),
+        date: today,
         type: "Despesa",
         description: originalText,
         category: finalCategory,
@@ -192,21 +277,22 @@ export default async function handler(req, res) {
     if (error) {
       return res.status(400).json({
         ok: false,
+        table: "transactions",
         error: error.message,
         details: error
       });
     }
 
     return res.status(200).json({
-  ok: true,
-  version: "atalho-v2-categorias",
-  debugText: originalText,
-  debugNormalizedText: normalize(originalText),
-  debugCategory: finalCategory,
-  debugAccount: account,
-  data
-});
-
+      ok: true,
+      version: "atalho-v3-casal",
+      table: "transactions",
+      debugText: originalText,
+      debugNormalizedText: normalize(originalText),
+      debugCategory: finalCategory,
+      debugAccount: account,
+      data
+    });
   } catch (err) {
     return res.status(500).json({
       ok: false,
