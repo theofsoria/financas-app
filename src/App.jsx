@@ -1,17 +1,21 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
+import { supabase } from "./supabase";
 
 const PEOPLE = ["Theo", "Aline"];
 const COLORS = ["#7c3aed", "#06b6d4", "#10b981", "#f59e0b", "#ef4444", "#64748b", "#ec4899"];
 
 const categoryRules = [
-  { category: "Alimentação", words: ["ifood", "mercado", "zaffari", "padaria", "restaurante", "cafe", "lanche", "supermercado", "jantar", "almoco"] },
-  { category: "Transporte", words: ["uber", "99", "gasolina", "posto", "estacionamento", "pedagio", "taxi"] },
-  { category: "Moradia", words: ["aluguel", "condominio", "luz", "agua", "internet"] },
-  { category: "Saúde", words: ["farmacia", "medico", "consulta", "exame", "remedio"] },
-  { category: "Lazer", words: ["bar", "cinema", "show", "viagem", "hotel", "festa"] },
-  { category: "Trabalho", words: ["cliente", "servico", "freela", "projeto", "nota", "salario"] },
+  { category: "Alimentação", words: ["ifood", "mercado", "zaffari", "padaria", "restaurante", "cafe", "lanche", "supermercado", "jantar", "almoco", "delivery", "comida", "pizza", "sushi", "rappi"] },
+  { category: "Transporte", words: ["uber", "99", "gasolina", "posto", "estacionamento", "pedagio", "taxi", "onibus", "metro", "corrida", "combustivel"] },
+  { category: "Moradia", words: ["aluguel", "condominio", "luz", "agua", "internet", "energia", "ceee", "dmae", "claro", "vivo", "tim"] },
+  { category: "Saúde", words: ["farmacia", "medico", "consulta", "exame", "remedio", "panvel", "drogaria", "dentista", "hospital", "laboratorio"] },
+  { category: "Lazer", words: ["bar", "cinema", "show", "viagem", "hotel", "festa", "ingresso", "balada", "cerveja", "drink"] },
+  { category: "Compras", words: ["amazon", "mercado livre", "magalu", "shein", "roupa", "tenis", "shopping", "loja", "presente"] },
+  { category: "Educação", words: ["curso", "faculdade", "livro", "aula", "escola", "prova", "mentoria"] },
+  { category: "Assinaturas", words: ["netflix", "spotify", "youtube", "icloud", "openai", "chatgpt", "prime", "assinatura"] },
+  { category: "Trabalho", words: ["cliente", "servico", "freela", "projeto", "nota", "salario", "recebimento", "dna", "empresa", "trabalho", "pagamento", "honorario"] },
   { category: "Casal", words: ["casal", "aline", "theo", "namorada", "namorado", "split", "dividir", "rachado", "rachada"] },
-  { category: "Reembolso", words: ["reembolso", "recebi", "paguei", "mae", "pai"] }
+  { category: "Reembolso", words: ["reembolso", "mae", "pai"] }
 ];
 
 const initialTransactions = [
@@ -66,8 +70,27 @@ function normalizeText(text) {
 
 function inferCategory(text) {
   const normalized = normalizeText(text);
+
+  const explicitCategory = normalized.match(/categoria ([a-z0-9 ]+)/);
+  if (explicitCategory && explicitCategory[1]) {
+    const raw = explicitCategory[1].trim();
+    const known = categoryRules.find((rule) => normalizeText(rule.category) === raw);
+    if (known) return known.category;
+  }
+
   const found = categoryRules.find((rule) => rule.words.some((word) => normalized.includes(normalizeText(word))));
   return found ? found.category : "Outros";
+}
+
+function detectAccount(text, isIncome) {
+  const lower = normalizeText(text);
+  if (lower.includes("pix")) return "Pix";
+  if (lower.includes("dinheiro") || lower.includes("cash")) return "Dinheiro";
+  if (lower.includes("debito") || lower.includes("débito")) return "Débito";
+  if (lower.includes("credito") || lower.includes("crédito") || lower.includes("cartao") || lower.includes("cartão") || lower.includes("visa") || lower.includes("master")) return "Cartão";
+  if (lower.includes("pj") || lower.includes("empresa")) return "Conta PJ";
+  if (isIncome) return "Conta";
+  return "Cartão";
 }
 
 function parseMoney(value) {
@@ -134,14 +157,7 @@ function parseQuickEntry(text) {
   const lower = normalizeText(text);
   const value = getFirstMoneyFromText(text);
 
-  const isCouple =
-    lower.includes("aline") ||
-    lower.includes("theo") ||
-    lower.includes("casal") ||
-    lower.includes("split") ||
-    lower.includes("dividir") ||
-    lower.includes("namorada") ||
-    lower.includes("namorado");
+  const isCouple = lower.includes("aline") || lower.includes("theo") || lower.includes("casal") || lower.includes("split") || lower.includes("dividir") || lower.includes("namorada") || lower.includes("namorado");
 
   const isIncome =
     lower.includes("recebi") ||
@@ -150,12 +166,13 @@ function parseQuickEntry(text) {
     lower.includes("entrada") ||
     lower.includes("receita") ||
     lower.includes("salario") ||
-    lower.includes("pagamento");
-
-  const type = isIncome ? "Receita" : "Despesa";
+    lower.includes("salário") ||
+    lower.includes("pagamento recebido") ||
+    lower.includes("deposito") ||
+    lower.includes("depósito");
 
   const familyReimbursement = getFamilyReimbursementPerson(text);
-
+  let type = isIncome ? "Receita" : "Despesa";
   let category = inferCategory(text);
 
   if (isIncome && !familyReimbursement) {
@@ -163,29 +180,15 @@ function parseQuickEntry(text) {
   }
 
   if (familyReimbursement) {
+    type = "Despesa";
     category = "Reembolso";
   }
 
-  let account = "Cartão";
-
-  if (lower.includes("pix")) account = "Pix";
-  else if (lower.includes("dinheiro")) account = "Dinheiro";
-  else if (lower.includes("debito")) account = "Débito";
-  else if (isIncome) account = "Conta";
-
+  const account = detectAccount(text, isIncome);
   const paidBy = getPaidBy(text);
   const split = parseSplitFromText(text, value, paidBy);
 
-  return {
-    value,
-    type,
-    category,
-    account,
-    isCouple,
-    paidBy,
-    familyReimbursement,
-    ...split,
-  };
+  return { value, type, category, account, isCouple, paidBy, familyReimbursement, ...split };
 }
 
 function calculateCoupleBalance(expenses) {
@@ -241,6 +244,13 @@ function runTests() {
     { name: "parse dinheiro virgula", ok: parseMoney("42,90") === 42.9 },
     { name: "parse dinheiro milhar", ok: parseMoney("1.234,56") === 1234.56 },
     { name: "quick receita", ok: parseQuickEntry("recebi 8500 de cliente via pix").type === "Receita" },
+    { name: "recebimento DNA tipo", ok: parseQuickEntry("recebimento DNA 3000 reais").type === "Receita" },
+    { name: "recebimento DNA categoria", ok: parseQuickEntry("recebimento DNA 3000 reais").category === "Trabalho" },
+    { name: "recebimento DNA conta", ok: parseQuickEntry("recebimento DNA 3000 reais").account === "Conta" },
+    { name: "cartao explicito", ok: parseQuickEntry("120 zaffari no cartão").account === "Cartão" },
+    { name: "categoria assinatura", ok: parseQuickEntry("openai 100 no cartao").category === "Assinaturas" },
+    { name: "recebimento DNA categoria trabalho", ok: parseQuickEntry("recebimento DNA 3000 reais").category === "Trabalho" },
+    { name: "recebimento DNA conta", ok: parseQuickEntry("recebimento DNA 3000 reais").account === "Conta" },
     { name: "reembolso mae", ok: parseQuickEntry("120 zaffari para mãe").familyReimbursement === "Mãe" },
     { name: "reembolso pai", ok: parseQuickEntry("80 farmacia para pai").familyReimbursement === "Pai" },
     { name: "detecta casal", ok: parseQuickEntry("jantar 120 com Aline").isCouple === true },
@@ -349,13 +359,59 @@ export default function ControleFinanceiroApp() {
   const [currentUserId, setCurrentUserId] = useState("theo");
   const [activeMonth, setActiveMonth] = useState("2026-04");
   const [closedMonths, setClosedMonths] = useState({});
-  const [transactions, setTransactions] = useState(initialTransactions);
-  const [coupleExpenses, setCoupleExpenses] = useState(initialCoupleExpenses);
+  const [transactions, setTransactions] = useState([]);
+  const [coupleExpenses, setCoupleExpenses] = useState([]);
   const [quickText, setQuickText] = useState("");
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ date: "2026-04-27", type: "Despesa", description: "", category: "Outros", account: "Cartão", value: "" });
   const [coupleForm, setCoupleForm] = useState({ date: "2026-04-27", description: "", category: "Alimentação", paidBy: "Theo", total: "", splitType: "Igual", theoShare: "", alineShare: "" });
+
+  useEffect(() => {
+    loadSupabaseData();
+  }, []);
+
+  async function loadSupabaseData() {
+    const { data: transactionData, error: transactionError } = await supabase
+      .from("transactions")
+      .select("*")
+      .order("date", { ascending: false });
+
+    const { data: coupleData, error: coupleError } = await supabase
+      .from("couple_expenses")
+      .select("*")
+      .order("date", { ascending: false });
+
+    if (transactionError || coupleError) {
+      console.log("SUPABASE LOAD ERROR", transactionError, coupleError);
+      setMessage("Erro ao carregar dados do Supabase.");
+      return;
+    }
+
+    setTransactions((transactionData || []).map((item) => ({
+      id: item.id,
+      userId: item.user_key || "theo",
+      date: item.date,
+      type: item.type,
+      description: item.description,
+      category: item.category,
+      account: item.account,
+      value: Number(item.value || 0),
+      reimbursementPerson: item.reimbursement_person || ""
+    })));
+
+    setCoupleExpenses((coupleData || []).map((item) => ({
+      id: item.id,
+      date: item.date,
+      description: item.description,
+      category: item.category,
+      paidBy: item.paid_by,
+      total: Number(item.total || 0),
+      splitType: item.split_type || "Igual",
+      theoShare: Number(item.theo_share || 0),
+      alineShare: Number(item.aline_share || 0)
+    })));
+  }
 
   const currentMonthIsClosed = Boolean(closedMonths[activeMonth]);
   const monthTransactions = useMemo(() => transactions.filter((t) => t.userId === currentUserId && monthKey(t.date) === activeMonth), [transactions, activeMonth, currentUserId]);
@@ -424,19 +480,51 @@ export default function ControleFinanceiroApp() {
     setMessage("Mês reaberto: " + monthLabel(activeMonth) + ".");
   }
 
-  function addPersonalTransaction(data) {
+  async function addPersonalTransaction(data) {
     const value = parseMoney(data.value);
     if (!data.description || !value) {
       setMessage("Preencha uma descrição e um valor válido.");
       return false;
     }
     if (!guardClosedMonth(data.date)) return false;
-    setTransactions((prev) => [{ ...data, id: Date.now(), userId: currentUserId, value }, ...prev]);
-    setMessage("Lançamento pessoal adicionado para " + getUserName(currentUserId) + ".");
+    const { data: inserted, error } = await supabase
+      .from("transactions")
+      .insert({
+        user_key: currentUserId,
+        date: data.date,
+        type: data.type,
+        description: data.description,
+        category: data.category,
+        account: data.account,
+        value,
+        reimbursement_person: data.reimbursementPerson || null
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.log("SUPABASE INSERT TRANSACTION ERROR", error);
+      setMessage("Erro ao salvar lançamento pessoal no Supabase.");
+      return false;
+    }
+
+    setTransactions((prev) => [{
+      id: inserted.id,
+      userId: inserted.user_key,
+      date: inserted.date,
+      type: inserted.type,
+      description: inserted.description,
+      category: inserted.category,
+      account: inserted.account,
+      value: Number(inserted.value || 0),
+      reimbursementPerson: inserted.reimbursement_person || ""
+    }, ...prev]);
+
+    setMessage("Lançamento pessoal salvo para " + getUserName(currentUserId) + ".");
     return true;
   }
 
-  function addCoupleExpense(data) {
+  async function addCoupleExpense(data) {
     const total = parseMoney(data.total);
     if (!data.description || !total) {
       setMessage("Preencha uma descrição e um valor válido para o casal.");
@@ -454,33 +542,65 @@ export default function ControleFinanceiroApp() {
       setMessage("Na divisão personalizada, Theo + Aline precisa fechar o valor total.");
       return false;
     }
-    setCoupleExpenses((prev) => [{ ...data, id: Date.now(), total, theoShare, alineShare, splitType }, ...prev]);
-    setMessage("Despesa do casal adicionada.");
+    const { data: inserted, error } = await supabase
+      .from("couple_expenses")
+      .insert({
+        date: data.date,
+        description: data.description,
+        category: data.category,
+        paid_by: data.paidBy,
+        total,
+        theo_share: theoShare,
+        aline_share: alineShare,
+        split_type: splitType
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.log("SUPABASE INSERT COUPLE ERROR", error);
+      setMessage("Erro ao salvar despesa do casal no Supabase.");
+      return false;
+    }
+
+    setCoupleExpenses((prev) => [{
+      id: inserted.id,
+      date: inserted.date,
+      description: inserted.description,
+      category: inserted.category,
+      paidBy: inserted.paid_by,
+      total: Number(inserted.total || 0),
+      theoShare: Number(inserted.theo_share || 0),
+      alineShare: Number(inserted.aline_share || 0),
+      splitType: inserted.split_type || "Igual"
+    }, ...prev]);
+
+    setMessage("Despesa do casal salva no Supabase.");
     return true;
   }
 
-  function handleQuickAdd() {
+  async function handleQuickAdd() {
     const parsed = parseQuickEntry(quickText);
     const date = activeMonth + "-27";
     if (parsed.isCouple) {
-      const saved = addCoupleExpense({ date, description: quickText, category: parsed.category === "Casal" ? "Alimentação" : parsed.category, paidBy: parsed.paidBy, total: parsed.value, splitType: parsed.splitType, theoShare: parsed.theoShare, alineShare: parsed.alineShare });
+      const saved = await addCoupleExpense({ date, description: quickText, category: parsed.category === "Casal" ? "Alimentação" : parsed.category, paidBy: parsed.paidBy, total: parsed.value, splitType: parsed.splitType, theoShare: parsed.theoShare, alineShare: parsed.alineShare });
       if (saved) {
         setQuickText("");
         setActiveTab("Casal");
       }
       return;
     }
-    const saved = addPersonalTransaction({ date, type: parsed.type, description: quickText, category: parsed.familyReimbursement ? "Reembolso" : parsed.category, account: parsed.account, value: parsed.value, reimbursementPerson: parsed.familyReimbursement });
+    const saved = await addPersonalTransaction({ date, type: parsed.type, description: quickText, category: parsed.familyReimbursement ? "Reembolso" : parsed.category, account: parsed.account, value: parsed.value, reimbursementPerson: parsed.familyReimbursement });
     if (saved) setQuickText("");
   }
 
-  function handleManualAdd() {
-    const saved = addPersonalTransaction(form);
+  async function handleManualAdd() {
+    const saved = await addPersonalTransaction(form);
     if (saved) setForm({ ...form, description: "", value: "", category: "Outros" });
   }
 
-  function handleCoupleManualAdd() {
-    const saved = addCoupleExpense(coupleForm);
+  async function handleCoupleManualAdd() {
+    const saved = await addCoupleExpense(coupleForm);
     if (saved) setCoupleForm({ ...coupleForm, description: "", total: "", splitType: "Igual", theoShare: "", alineShare: "" });
   }
 
@@ -496,18 +616,50 @@ export default function ControleFinanceiroApp() {
     const payer = coupleBalance > 0 ? "Aline" : "Theo";
     const receiver = coupleBalance > 0 ? "Theo" : "Aline";
     const amount = Math.abs(coupleBalance);
-    setCoupleExpenses((prev) => [{ id: Date.now(), date: activeMonth + "-28", description: "Acerto: " + payer + " pagou " + receiver, category: "Reembolso", paidBy: payer, total: amount, splitType: "Acerto", theoShare: payer === "Aline" ? amount : 0, alineShare: payer === "Theo" ? amount : 0 }, ...prev]);
-    setMessage("Acerto registrado e saldo zerado.");
+    addCoupleExpense({
+      date: activeMonth + "-28",
+      description: "Acerto: " + payer + " pagou " + receiver,
+      category: "Reembolso",
+      paidBy: payer,
+      total: amount,
+      splitType: "Acerto",
+      theoShare: payer === "Aline" ? amount : 0,
+      alineShare: payer === "Theo" ? amount : 0
+    });
   }
 
-  function removePersonalTransaction(item) {
+  async function removePersonalTransaction(item) {
     if (!guardClosedMonth(item.date)) return;
+
+    const { error } = await supabase
+      .from("transactions")
+      .delete()
+      .eq("id", item.id);
+
+    if (error) {
+      console.log("SUPABASE DELETE TRANSACTION ERROR", error);
+      setMessage("Erro ao remover lançamento pessoal.");
+      return;
+    }
+
     setTransactions((prev) => prev.filter((t) => t.id !== item.id));
     setMessage("Lançamento pessoal removido.");
   }
 
-  function removeCoupleExpense(item) {
+  async function removeCoupleExpense(item) {
     if (!guardClosedMonth(item.date)) return;
+
+    const { error } = await supabase
+      .from("couple_expenses")
+      .delete()
+      .eq("id", item.id);
+
+    if (error) {
+      console.log("SUPABASE DELETE COUPLE ERROR", error);
+      setMessage("Erro ao remover despesa do casal.");
+      return;
+    }
+
     setCoupleExpenses((prev) => prev.filter((t) => t.id !== item.id));
     setMessage("Despesa do casal removida.");
   }
@@ -546,34 +698,17 @@ export default function ControleFinanceiroApp() {
         </Card>
 
         <Card>
-  <div className="space-y-4">
-    <div>
-      <SectionTitle title="Competência" subtitle="Escolha o mês de trabalho e feche quando terminar." />
-      <p className="mt-2 text-sm font-bold text-slate-700">
-        Status: {currentMonthIsClosed ? "Fechado" : "Aberto"}
-      </p>
-    </div>
-
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-      <Input
-        type="month"
-        value={activeMonth}
-        onChange={(e) => syncFormMonth(e.target.value)}
-        className="w-full min-w-0"
-      />
-
-      {currentMonthIsClosed ? (
-        <Button type="button" variant="secondary" onClick={reopenMonth} className="w-full sm:w-auto">
-          Reabrir mês
-        </Button>
-      ) : (
-        <Button type="button" onClick={closeMonth} className="w-full sm:w-auto">
-          Fechar mês
-        </Button>
-      )}
-    </div>
-  </div>
-</Card>
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <SectionTitle title="Competência" subtitle="Escolha o mês de trabalho e feche quando terminar." />
+              <p className="mt-2 text-sm font-bold text-slate-700">Status: {currentMonthIsClosed ? "Fechado" : "Aberto"}</p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input type="month" value={activeMonth} onChange={(e) => syncFormMonth(e.target.value)} className="sm:w-48" />
+              {currentMonthIsClosed ? <Button type="button" variant="secondary" onClick={reopenMonth}>Reabrir mês</Button> : <Button type="button" onClick={closeMonth}>Fechar mês</Button>}
+            </div>
+          </div>
+        </Card>
 
         <div className="sticky top-3 z-10 rounded-[24px] bg-white/70 p-2 shadow-sm ring-1 ring-black/5 backdrop-blur">
           <div className="grid grid-cols-3 gap-2">
