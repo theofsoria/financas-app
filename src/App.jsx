@@ -876,8 +876,8 @@ export default function ControleFinanceiroApp() {
                   <p className="mt-1 text-3xl font-black">{brl(personalTotals.familyReimbursement)}</p>
                 </div>
                 <div className="mt-4 space-y-2">
-                  {visibleFamilyReimbursements.length === 0 ? <p className="text-sm text-slate-400">Nenhum reembolso familiar neste mês.</p> : null}
-                  {visibleFamilyReimbursements.map((item) => (
+                  {familyReimbursements.length === 0 ? <p className="text-sm text-slate-400">Nenhum reembolso familiar neste mês.</p> : null}
+                  {familyReimbursements.map((item) => (
                     <div key={item.id} className="flex items-center justify-between rounded-2xl bg-slate-50 p-3 text-sm">
                       <span><b>{item.reimbursementPerson}</b> · {item.description}</span>
                       <span className="font-black">{brl(item.value)}</span>
