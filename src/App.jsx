@@ -115,7 +115,14 @@ function getPaidBy(text, fallback = "Theo") {
 
 function getUserNameFromEmail(email) {
   const lower = normalizeText(email || "");
-  if (lower.includes("aline")) return "Aline";
+
+  if (
+    lower.includes("aline") ||
+    lower.includes("ilhas.aline@gmail.com")
+  ) {
+    return "Aline";
+  }
+
   return "Theo";
 }
 
