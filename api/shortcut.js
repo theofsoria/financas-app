@@ -198,13 +198,15 @@ export default async function handler(req, res) {
     }
 
     return res.status(200).json({
-      ok: true,
-      debugText: originalText,
-      debugNormalizedText: normalize(originalText),
-      debugCategory: finalCategory,
-      debugAccount: account,
-      data
-    });
+  ok: true,
+  version: "atalho-v2-categorias",
+  debugText: originalText,
+  debugNormalizedText: normalize(originalText),
+  debugCategory: finalCategory,
+  debugAccount: account,
+  data
+});
+
   } catch (err) {
     return res.status(500).json({
       ok: false,
